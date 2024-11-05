@@ -41,7 +41,7 @@ def parse_edge_input(edge_text):
         return None
 
 def compare_structural_similarity(G1, G2):
-    """Compare graphs based on structural properties"""
+    """Compare graphs based on structural properties with actual values"""
     
     # Check if graphs are connected
     is_G1_connected = nx.is_connected(G1)
@@ -60,21 +60,54 @@ def compare_structural_similarity(G1, G2):
     except:
         avg_path_G1 = avg_path_G2 = diameter_G1 = diameter_G2 = None
     
+    # Get actual values for comparison
+    nodes_G1 = len(G1)
+    nodes_G2 = len(G2)
+    edges_G1 = len(G1.edges())
+    edges_G2 = len(G2.edges())
+    degree_seq_G1 = sorted([d for n, d in G1.degree()])
+    degree_seq_G2 = sorted([d for n, d in G2.degree()])
+    density_G1 = nx.density(G1)
+    density_G2 = nx.density(G2)
+    
     similarity_metrics = {
-        'Number of Nodes Match': len(G1) == len(G2),
-        'Number of Edges Match': len(G1.edges()) == len(G2.edges()),
-        'Degree Sequence Match': sorted([d for n, d in G1.degree()]) == 
-                                sorted([d for n, d in G2.degree()]),
-        'Density Match': abs(nx.density(G1) - nx.density(G2)) < 1e-9,
-        'Connected Components Match': G1_components == G2_components,
-        'Both Graphs Connected': is_G1_connected and is_G2_connected
+        'Number of Nodes Match': {
+            'match': nodes_G1 == nodes_G2,
+            'values': (nodes_G1, nodes_G2)
+        },
+        'Number of Edges Match': {
+            'match': edges_G1 == edges_G2,
+            'values': (edges_G1, edges_G2)
+        },
+        'Degree Sequence Match': {
+            'match': degree_seq_G1 == degree_seq_G2,
+            'values': (degree_seq_G1, degree_seq_G2)
+        },
+        'Density Match': {
+            'match': abs(density_G1 - density_G2) < 1e-9,
+            'values': (f"{density_G1:.4f}", f"{density_G2:.4f}")
+        },
+        'Connected Components Match': {
+            'match': G1_components == G2_components,
+            'values': (G1_components, G2_components)
+        },
+        'Both Graphs Connected': {
+            'match': is_G1_connected and is_G2_connected,
+            'values': (is_G1_connected, is_G2_connected)
+        }
     }
     
     # Add path-based metrics only if both graphs are connected
     if is_G1_connected and is_G2_connected:
         similarity_metrics.update({
-            'Average Path Length Match': abs(avg_path_G1 - avg_path_G2) < 1e-9,
-            'Diameter Match': diameter_G1 == diameter_G2
+            'Average Path Length Match': {
+                'match': abs(avg_path_G1 - avg_path_G2) < 1e-9,
+                'values': (f"{avg_path_G1:.4f}", f"{avg_path_G2:.4f}")
+            },
+            'Diameter Match': {
+                'match': diameter_G1 == diameter_G2,
+                'values': (diameter_G1, diameter_G2)
+            }
         })
     
     return similarity_metrics
@@ -217,99 +250,178 @@ def calculate_matrix_similarities(G1, G2):
     }
 
 def get_graph_embedding(G, dimensions=8):
-    """使用譜嵌入生成圖嵌入，增強了對不連通圖的處理"""
-    # 檢查圖的大小和連通性
+    """使用改進的譜嵌入方法生成圖嵌入"""
+    # 檢查圖的大小
     n_nodes = len(G)
     
-    # 調整維度，確保不超過節點數
-    actual_dimensions = min(dimensions, max(1, n_nodes - 1))
-    
-    # 對於小圖特別處理
-    if n_nodes <= 2:
-        # 對於非常小的圖，使用簡單的特徵表示
-        random_state = np.random.RandomState(42)
-        embeddings = random_state.rand(n_nodes, actual_dimensions)
-        node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
-        graph_embedding = np.mean(embeddings, axis=0)
-        return graph_embedding, node_embeddings
-    
-    # 獲取鄰接矩陣
-    A = nx.adjacency_matrix(G).todense()
+    # 調整維度，確保所有圖使用相同維度
+    actual_dimensions = min(8, max(1, n_nodes - 1))
     
     try:
-        # 處理不連通圖
-        if not nx.is_connected(G):
-            # 為不連通的部分添加很小的連接權重
-            A = A + np.eye(n_nodes) * 1e-6
+        # 計算拉普拉斯矩陣的特徵向量作為節點嵌入
+        L = nx.normalized_laplacian_matrix(G).todense()
+        eigenvalues, eigenvectors = np.linalg.eigh(L)
         
-        # 創建譜嵌入，使用調整後的維度
-        embedding = SpectralEmbedding(
-            n_components=actual_dimensions,
-            random_state=42,
-            affinity='precomputed',  # 直接使用鄰接矩陣
-            eigen_solver='arpack' if n_nodes > 10 else 'dense'  # 根據圖大小選擇求解器
-        )
+        # 使用最小的非零特徵值對應的特徵向量
+        # 排除第一個特徵值（總是0）
+        idx = np.argsort(eigenvalues)[1:actual_dimensions+1]
+        embeddings = np.real(eigenvectors[:, idx])
         
-        # 計算嵌入
-        embeddings = embedding.fit_transform(A)
+        # 安全的標準化嵌入
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        # 避免除以零，如果範數為零，則用1替代
+        norms[norms == 0] = 1
+        embeddings = embeddings / norms
+        
+        # 檢查並處理任何可能的 NaN 值
+        embeddings = np.nan_to_num(embeddings, nan=0.0)
         
         # 創建節點嵌入字典
         node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
         
-        # 計算圖嵌入
-        graph_embedding = np.mean(embeddings, axis=0)
+        # 計算圖嵌入為節點嵌入的加權平均
+        # 使用度作為權重，確保權重和為1
+        degrees = np.array([G.degree(node) for node in G.nodes()])
+        weights = degrees / (degrees.sum() + 1e-10)  # 添加小量以避免除以零
         
+        # 使用安全的加權平均
+        graph_embedding = np.average(embeddings, axis=0, weights=weights)
+        
+        # 最後檢查確保沒有 NaN 值
+        if np.any(np.isnan(graph_embedding)):
+            raise ValueError("Graph embedding contains NaN values")
+            
         return graph_embedding, node_embeddings
         
     except Exception as e:
-        # 如果譜嵌入失敗，使用後備方案
-        st.warning(f"使用後備嵌入方法。原因：{str(e)}")
-        random_state = np.random.RandomState(42)
-        embeddings = random_state.rand(n_nodes, actual_dimensions)
-        node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
-        graph_embedding = np.mean(embeddings, axis=0)
-        return graph_embedding, node_embeddings
+        st.warning(f"使用基本嵌入方法。原因：{str(e)}")
+        # 使用更穩健的後備方法
+        try:
+            # 使用基本的圖特徵
+            features = []
+            
+            # 1. 度中心性
+            degree_cent = nx.degree_centrality(G)
+            features.append(list(degree_cent.values()))
+            
+            # 2. 聚類係數
+            clustering = nx.clustering(G)
+            features.append(list(clustering.values()))
+            
+            # 3. 節點連接數
+            degrees = [G.degree(node) for node in G.nodes()]
+            max_degree = max(degrees) if degrees else 1
+            normalized_degrees = [d/max_degree for d in degrees]
+            features.append(normalized_degrees)
+            
+            # 組合特徵
+            embeddings = np.array(features).T  # 轉置使每行代表一個節點
+            
+            # 如果需要更多維度，用零填充
+            if embeddings.shape[1] < actual_dimensions:
+                padding = np.zeros((embeddings.shape[0], actual_dimensions - embeddings.shape[1]))
+                embeddings = np.hstack([embeddings, padding])
+            
+            # 標準化
+            embeddings = (embeddings - embeddings.mean(axis=0)) / (embeddings.std(axis=0) + 1e-10)
+            
+            # 創建節點嵌入字典
+            node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
+            
+            # 計算圖嵌入
+            graph_embedding = np.mean(embeddings, axis=0)
+            
+            return graph_embedding, node_embeddings
+            
+        except Exception as e:
+            # 如果所有方法都失敗，返回隨機嵌入
+            st.warning(f"使用隨機嵌入。原因：{str(e)}")
+            random_state = np.random.RandomState(42)
+            embeddings = random_state.rand(n_nodes, actual_dimensions)
+            node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
+            graph_embedding = np.mean(embeddings, axis=0)
+            return graph_embedding, node_embeddings
 
 def compare_embeddings(G1, G2):
-    """Compare graphs using embeddings"""
-    # Generate embeddings
-    graph1_emb, nodes1_emb = get_graph_embedding(G1)
-    graph2_emb, nodes2_emb = get_graph_embedding(G2)
-    
-    # Calculate graph-level similarity
-    graph_similarity = cosine_similarity(
-        graph1_emb.reshape(1, -1),
-        graph2_emb.reshape(1, -1)
-    )[0][0]
-    
-    # Calculate average node embedding similarity
-    node_similarities = []
-    for node1, emb1 in nodes1_emb.items():
-        for node2, emb2 in nodes2_emb.items():
-            sim = cosine_similarity(
-                emb1.reshape(1, -1),
-                emb2.reshape(1, -1)
-            )[0][0]
-            node_similarities.append(sim)
-    avg_node_similarity = np.mean(node_similarities)
-    
-    return {
-        'Graph Embedding Similarity': {
-            'value': graph_similarity,
-            'steps': {
-                'graph1_embedding': graph1_emb,
-                'graph2_embedding': graph2_emb,
-                'similarity': graph_similarity
-            }
-        },
-        'Average Node Embedding Similarity': {
-            'value': avg_node_similarity,
-            'steps': {
-                'individual_similarities': node_similarities,
-                'average': avg_node_similarity
+    """Compare graphs using embeddings with improved isomorphic handling"""
+    try:
+        # Generate embeddings with fixed dimensions
+        graph1_emb, nodes1_emb = get_graph_embedding(G1)
+        graph2_emb, nodes2_emb = get_graph_embedding(G2)
+        
+        # Ensure both embeddings have the same dimensions
+        min_dim = min(len(graph1_emb), len(graph2_emb))
+        graph1_emb = graph1_emb[:min_dim]
+        graph2_emb = graph2_emb[:min_dim]
+        
+        # Calculate graph-level similarity considering possible sign flips
+        graph_similarity = max(
+            abs(cosine_similarity(graph1_emb.reshape(1, -1), graph2_emb.reshape(1, -1))[0][0]),
+            abs(cosine_similarity(graph1_emb.reshape(1, -1), -graph2_emb.reshape(1, -1))[0][0])
+        )
+        
+        # Ensure node embeddings have consistent dimensions
+        for node in nodes1_emb:
+            nodes1_emb[node] = nodes1_emb[node][:min_dim]
+        for node in nodes2_emb:
+            nodes2_emb[node] = nodes2_emb[node][:min_dim]
+        
+        # Calculate node similarities considering structural roles rather than labels
+        node_similarities = []
+        emb1_list = list(nodes1_emb.values())
+        emb2_list = list(nodes2_emb.values())
+        
+        # For each node in G1, find the best matching node in G2
+        for emb1 in emb1_list:
+            best_sim = -1
+            for emb2 in emb2_list:
+                # Consider both positive and negative alignments
+                sim = max(
+                    abs(cosine_similarity(emb1.reshape(1, -1), emb2.reshape(1, -1))[0][0]),
+                    abs(cosine_similarity(emb1.reshape(1, -1), -emb2.reshape(1, -1))[0][0])
+                )
+                best_sim = max(best_sim, sim)
+            node_similarities.append(best_sim)
+        
+        avg_node_similarity = np.mean(node_similarities) if node_similarities else 0.0
+        
+        return {
+            'Graph Embedding Similarity': {
+                'value': float(graph_similarity),
+                'steps': {
+                    'graph1_embedding': graph1_emb,
+                    'graph2_embedding': graph2_emb,
+                    'similarity': float(graph_similarity)
+                }
+            },
+            'Average Node Embedding Similarity': {
+                'value': float(avg_node_similarity),
+                'steps': {
+                    'individual_similarities': node_similarities,
+                    'average': float(avg_node_similarity)
+                }
             }
         }
-    }
+    except Exception as e:
+        st.error(f"嵌入計算錯誤：{str(e)}")
+        # 返回預設值
+        return {
+            'Graph Embedding Similarity': {
+                'value': 0.0,
+                'steps': {
+                    'graph1_embedding': np.zeros(8),
+                    'graph2_embedding': np.zeros(8),
+                    'similarity': 0.0
+                }
+            },
+            'Average Node Embedding Similarity': {
+                'value': 0.0,
+                'steps': {
+                    'individual_similarities': [],
+                    'average': 0.0
+                }
+            }
+        }
 
 def get_metric_explanations():
     """Return explanations and formulas for each metric"""
@@ -531,14 +643,21 @@ def main():
         # Structural similarities tab
         with tab2:
             struct_sim = compare_structural_similarity(G1, G2)
-            for metric, value in struct_sim.items():
+            for metric, data in struct_sim.items():
                 with st.container():
-                    col1, col2 = st.columns([3, 1])
+                    col1, col2, col3 = st.columns([3, 2, 1])
                     with col1:
                         st.write(f"**{metric}**")
                         st.caption(explanations[metric])
                     with col2:
-                        st.write(f"{'✅' if value else '❌'}")
+                        val1, val2 = data['values']
+                        if isinstance(val1, list):
+                            st.caption(f"G1: {val1}")
+                            st.caption(f"G2: {val2}")
+                        else:
+                            st.caption(f"G1: {val1}, G2: {val2}")
+                    with col3:
+                        st.write(f"{'✅' if data['match'] else '❌'}")
         
         # Node-level similarities tab
         with tab3:
