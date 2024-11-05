@@ -109,3 +109,7 @@ A Streamlit web application for comparing two graphs using various similarity me
 - Handles disconnected graphs by computing metrics per component
 - Provides detailed calculation steps and formulas
 - Optimized visualization using matplotlib
+
+## Live Demo
+
+Try the app at: [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://oldcats-graph-similarity-comparison-graph-similarity-app-dfeblx.streamlit.app/)
