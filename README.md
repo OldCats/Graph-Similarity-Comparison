@@ -1,19 +1,21 @@
 # Graph Similarity Comparison Tool
 
+![Graph Comparison Tool](graph_comparison.png)
+
 A Streamlit web application for comparing two graphs using various similarity metrics. This tool provides visual and quantitative analysis of graph similarities through multiple comparison methods.
 
 ## Features
 
 - Interactive web interface with:
   - Easy graph input through text areas (supports 'node1 node2' or 'node1,node2' format)
-  - Side-by-side graph visualization with explanatory tooltips
-  - Tabbed results display with detailed metric explanations
+  - Side-by-side graph visualization with component counts
+  - Tabbed results display with detailed metric explanations and formulas
 
 - Comprehensive similarity metrics:
   1. Matrix-based Similarities:
      - Jaccard Similarity (ratio of common edges to total edges)
      - Cosine Similarity (adjacency matrix angle comparison)
-     - Spectral Similarity (eigenvalue-based structural comparison) 
+     - Spectral Similarity (eigenvalue-based structural comparison)
      - Graph Edit Distance Similarity (minimum transformation cost)
 
   2. Structural Similarities:
@@ -21,8 +23,8 @@ A Streamlit web application for comparing two graphs using various similarity me
      - Degree sequence comparison
      - Graph density analysis
      - Connected components detection
-     - Average path length comparison
-     - Graph diameter analysis
+     - Average path length comparison (for connected graphs)
+     - Graph diameter analysis (for connected graphs)
 
   3. Node-level Properties:
      - Degree distribution patterns
@@ -30,26 +32,22 @@ A Streamlit web application for comparing two graphs using various similarity me
      - Betweenness centrality analysis
      - Closeness centrality comparison
 
+  4. Embedding-based Similarities:
+     - Graph-level embedding similarity using node2vec
+     - Average node embedding similarity
+     - Node embedding distribution visualization
+
 - Visualization Features:
-  - Interactive side-by-side graph plots
+  - Side-by-side graph plots
   - Color-coded nodes (lightblue for Graph 1, lightgreen for Graph 2)
   - Connected component count display
   - Clear node labels with size 16 font
-  - Optimized spring layout with k=1 spacing
+  - Spring layout with k=1 spacing
 
 ## Installation
 
 1. Clone the repository
-2. Install required dependencies using pip:
-   ```bash
-   pip install streamlit>=1.24.0
-   pip install networkx>=3.1 
-   pip install numpy>=1.24.0
-   pip install matplotlib>=3.7.1
-   pip install scipy>=1.10.1
-   ```
-   
-   Or install all requirements at once:
+2. Install required dependencies:
    ```bash
    pip install -r requirements.txt
    ```
@@ -59,7 +57,6 @@ A Streamlit web application for comparing two graphs using various similarity me
    streamlit run graph_similarity_app.py
    ```
 
-
 ## Usage
 
 1. Input Graph Data:
@@ -67,47 +64,48 @@ A Streamlit web application for comparing two graphs using various similarity me
      ```
      1 2
      2 3
-     3 1
+     3 4
+     4 1
+     2 4
      ```
      or
      ```
      1,2
      2,3
-     3,1
+     3,4
+     4,1
+     2,4
      ```
 
 2. View Results:
-   - Side-by-side graph visualizations
-   - Detailed similarity metrics across multiple categories
-   - Node-level property comparisons
+   - Graph visualizations with component counts
+   - Detailed similarity metrics across four categories:
+     - Matrix-based Similarities
+     - Structural Similarities  
+     - Node-level Similarities
+     - Embedding-based Similarities
+   - Interactive formulas and calculation steps
+   - Distribution visualizations for node embeddings
 
 3. Interpret Results:
-   - Green checkmarks indicate matching properties
-   - Numerical differences shown for continuous metrics
-   - Connected component analysis for disconnected graphs
+   - ✅ indicates exact matches between graphs
+   - ❌ indicates differences between graphs
+   - Similarity values range from 0.0 (different) to 1.0 (identical)
+   - For differences, values closer to 0.0 indicate more similarity
 
 ## Notes
 
 - Graphs should be undirected and unweighted
 - Node labels must be integers
-- For best visualization, keep graphs under 20 nodes
-- Some metrics only available for connected graphs
-- Large graphs may take longer to process
+- Some metrics (like average path length) only available for connected graphs
+- Embedding calculations require connected graphs with sufficient nodes
+- Default sample graphs demonstrate basic usage
 
-## Contributing
+## Implementation Details
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-
-## Demo
-
-Try out the live demo at: [Graph Similarity Comparison Demo](https://oldcats-graph-similarity-comparison-graph-similarity-app-dfeblx.streamlit.app/)
-
-The demo site allows you to:
-- Input sample graphs and see visualizations
-- Compare structural properties in real-time 
-- Explore different graph metrics and similarity measures
-- Test with both connected and disconnected graphs
-
-
-
+- Uses NetworkX for graph operations and metrics
+- Implements node2vec for graph embeddings
+- Calculates matrix similarities using numpy/scipy
+- Handles disconnected graphs by computing metrics per component
+- Provides detailed calculation steps and formulas
+- Optimized visualization using matplotlib

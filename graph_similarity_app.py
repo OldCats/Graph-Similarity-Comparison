@@ -5,6 +5,9 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cosine
 from scipy.linalg import eigvals
+from node2vec import Node2Vec
+from gensim.models import KeyedVectors
+from sklearn.metrics.pairwise import cosine_similarity
 
 def create_sample_graphs():
     # First graph
@@ -214,6 +217,71 @@ def calculate_matrix_similarities(G1, G2):
         'Graph Edit Distance Similarity': {'value': ged_sim, 'steps': ged_steps}
     }
 
+def get_graph_embedding(G, dimensions=8, walk_length=30, num_walks=200):
+    """Generate graph embedding using node2vec"""
+    # Initialize node2vec model
+    node2vec = Node2Vec(
+        G,
+        dimensions=dimensions,
+        walk_length=walk_length,
+        num_walks=num_walks,
+        workers=1  # Single worker for reproducibility
+    )
+    
+    # Train the model
+    model = node2vec.fit(window=10, min_count=1)
+    
+    # Get embeddings for all nodes
+    node_embeddings = {}
+    for node in G.nodes():
+        node_embeddings[node] = model.wv[str(node)]
+    
+    # Calculate graph embedding as mean of node embeddings
+    graph_embedding = np.mean(list(node_embeddings.values()), axis=0)
+    
+    return graph_embedding, node_embeddings
+
+def compare_embeddings(G1, G2):
+    """Compare graphs using embeddings"""
+    # Generate embeddings
+    graph1_emb, nodes1_emb = get_graph_embedding(G1)
+    graph2_emb, nodes2_emb = get_graph_embedding(G2)
+    
+    # Calculate graph-level similarity
+    graph_similarity = cosine_similarity(
+        graph1_emb.reshape(1, -1),
+        graph2_emb.reshape(1, -1)
+    )[0][0]
+    
+    # Calculate average node embedding similarity
+    node_similarities = []
+    for node1, emb1 in nodes1_emb.items():
+        for node2, emb2 in nodes2_emb.items():
+            sim = cosine_similarity(
+                emb1.reshape(1, -1),
+                emb2.reshape(1, -1)
+            )[0][0]
+            node_similarities.append(sim)
+    avg_node_similarity = np.mean(node_similarities)
+    
+    return {
+        'Graph Embedding Similarity': {
+            'value': graph_similarity,
+            'steps': {
+                'graph1_embedding': graph1_emb,
+                'graph2_embedding': graph2_emb,
+                'similarity': graph_similarity
+            }
+        },
+        'Average Node Embedding Similarity': {
+            'value': avg_node_similarity,
+            'steps': {
+                'individual_similarities': node_similarities,
+                'average': avg_node_similarity
+            }
+        }
+    }
+
 def get_metric_explanations():
     """Return explanations and formulas for each metric"""
     base_explanations = {
@@ -275,6 +343,21 @@ def get_metric_explanations():
         'Average Path Length Match': 'Compares the average shortest path length (only for connected graphs).',
         'Diameter Match': 'Compares the maximum shortest path length (only for connected graphs).',
         'Degree Distribution Match': 'Compares the frequency distribution of node degrees between graphs.',
+        
+        # Add embedding metrics
+        'Graph Embedding Similarity': {
+            'description': 'Measures similarity between graph-level embeddings using node2vec',
+            'formula': r"""
+            sim(G_1, G_2) = \cos(\text{mean}(N_1), \text{mean}(N_2))
+            \text{ where } N_i \text{ are node embeddings}
+            """
+        },
+        'Average Node Embedding Similarity': {
+            'description': 'Average similarity between all pairs of node embeddings',
+            'formula': r"""
+            sim = \frac{1}{|V_1||V_2|}\sum_{i \in V_1}\sum_{j \in V_2} \cos(emb(i), emb(j))
+            """
+        }
     }
     
     return base_explanations
@@ -356,10 +439,11 @@ def main():
         st.subheader("📈 Comparison Results")
         
         # Create tabs for different metric categories
-        tab1, tab2, tab3 = st.tabs([
-            "Matrix-based Similarities", 
-            "Structural Similarities", 
-            "Node-level Similarities"
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "Matrix-based Similarities",
+            "Structural Similarities",
+            "Node-level Similarities",
+            "Embedding-based Similarities"
         ])
         
         # Matrix-based similarities tab
@@ -451,6 +535,49 @@ def main():
                                 value=f"{value:.4f}",
                                 label_visibility="collapsed"
                             )
+        
+        # Embedding-based similarities tab
+        with tab4:
+            try:
+                embedding_sim = compare_embeddings(G1, G2)
+                for metric, data in embedding_sim.items():
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"**{metric}**")
+                            explanation = explanations[metric]
+                            if isinstance(explanation, dict):
+                                st.caption(explanation['description'])
+                                with st.expander("Show Formula and Details"):
+                                    st.latex(explanation['formula'])
+                                    st.write("**Calculation Details:**")
+                                    steps = data['steps']
+                                    
+                                    if metric == 'Graph Embedding Similarity':
+                                        st.write("Graph 1 embedding (first 3 dimensions):")
+                                        st.write(steps['graph1_embedding'][:3])
+                                        st.write("Graph 2 embedding (first 3 dimensions):")
+                                        st.write(steps['graph2_embedding'][:3])
+                                        st.write(f"Cosine similarity: {steps['similarity']:.4f}")
+                                    
+                                    elif metric == 'Average Node Embedding Similarity':
+                                        st.write("Distribution of node-pair similarities:")
+                                        fig, ax = plt.subplots()
+                                        ax.hist(steps['individual_similarities'], bins=20)
+                                        ax.set_xlabel("Similarity")
+                                        ax.set_ylabel("Frequency")
+                                        st.pyplot(fig)
+                                        st.write(f"Average similarity: {steps['average']:.4f}")
+                        
+                        with col2:
+                            st.metric(
+                                label=metric,
+                                value=f"{data['value']:.4f}",
+                                label_visibility="collapsed"
+                            )
+            except Exception as e:
+                st.error(f"Error calculating embedding similarities: {str(e)}")
+                st.info("Note: Embedding calculation requires connected graphs with sufficient nodes.")
 
 if __name__ == "__main__":
     main() 
