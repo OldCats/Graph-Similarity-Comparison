@@ -41,16 +41,39 @@ def parse_edge_input(edge_text):
 def compare_structural_similarity(G1, G2):
     """Compare graphs based on structural properties"""
     
+    # Check if graphs are connected
+    is_G1_connected = nx.is_connected(G1)
+    is_G2_connected = nx.is_connected(G2)
+    
+    # Get connected components count
+    G1_components = nx.number_connected_components(G1)
+    G2_components = nx.number_connected_components(G2)
+    
+    # Calculate average path length and diameter only if graphs are connected
+    try:
+        avg_path_G1 = nx.average_shortest_path_length(G1) if is_G1_connected else None
+        avg_path_G2 = nx.average_shortest_path_length(G2) if is_G2_connected else None
+        diameter_G1 = nx.diameter(G1) if is_G1_connected else None
+        diameter_G2 = nx.diameter(G2) if is_G2_connected else None
+    except:
+        avg_path_G1 = avg_path_G2 = diameter_G1 = diameter_G2 = None
+    
     similarity_metrics = {
         'Number of Nodes Match': len(G1) == len(G2),
         'Number of Edges Match': len(G1.edges()) == len(G2.edges()),
         'Degree Sequence Match': sorted([d for n, d in G1.degree()]) == 
                                 sorted([d for n, d in G2.degree()]),
         'Density Match': abs(nx.density(G1) - nx.density(G2)) < 1e-9,
-        'Average Path Length Match': abs(nx.average_shortest_path_length(G1) - 
-                                      nx.average_shortest_path_length(G2)) < 1e-9,
-        'Diameter Match': nx.diameter(G1) == nx.diameter(G2)
+        'Connected Components Match': G1_components == G2_components,
+        'Both Graphs Connected': is_G1_connected and is_G2_connected
     }
+    
+    # Add path-based metrics only if both graphs are connected
+    if is_G1_connected and is_G2_connected:
+        similarity_metrics.update({
+            'Average Path Length Match': abs(avg_path_G1 - avg_path_G2) < 1e-9,
+            'Diameter Match': diameter_G1 == diameter_G2
+        })
     
     return similarity_metrics
 
@@ -63,12 +86,24 @@ def compare_node_similarity(G1, G2):
     clustering1 = nx.average_clustering(G1)
     clustering2 = nx.average_clustering(G2)
     
-    # Calculate centrality measures
-    betweenness1 = nx.betweenness_centrality(G1)
-    betweenness2 = nx.betweenness_centrality(G2)
+    # Calculate centrality measures for each component if graphs are disconnected
+    def safe_centrality_calculation(G, centrality_func):
+        if nx.is_connected(G):
+            return centrality_func(G)
+        else:
+            # Calculate for each component and combine
+            centrality_dict = {}
+            for component in nx.connected_components(G):
+                subgraph = G.subgraph(component)
+                centrality_dict.update(centrality_func(subgraph))
+            return centrality_dict
     
-    closeness1 = nx.closeness_centrality(G1)
-    closeness2 = nx.closeness_centrality(G2)
+    # Calculate centrality measures safely
+    betweenness1 = safe_centrality_calculation(G1, nx.betweenness_centrality)
+    betweenness2 = safe_centrality_calculation(G2, nx.betweenness_centrality)
+    
+    closeness1 = safe_centrality_calculation(G1, nx.closeness_centrality)
+    closeness2 = safe_centrality_calculation(G2, nx.closeness_centrality)
     
     node_metrics = {
         'Degree Distribution Match': deg_dist1 == deg_dist2,
@@ -86,29 +121,41 @@ def plot_graphs(G1, G2):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
     # Plot first graph with spring layout
-    pos1 = nx.spring_layout(G1)
+    pos1 = nx.spring_layout(G1, k=1)  # Increased k for better spacing of components
     nx.draw(G1, pos1, ax=ax1, with_labels=True, node_color='lightblue', 
             node_size=500, font_size=16)
-    ax1.set_title("Graph 1")
+    ax1.set_title(f"Graph 1 ({nx.number_connected_components(G1)} components)")
     
     # Plot second graph with spring layout
-    pos2 = nx.spring_layout(G2)
+    pos2 = nx.spring_layout(G2, k=1)  # Increased k for better spacing of components
     nx.draw(G2, pos2, ax=ax2, with_labels=True, node_color='lightgreen', 
             node_size=500, font_size=16)
-    ax2.set_title("Graph 2")
+    ax2.set_title(f"Graph 2 ({nx.number_connected_components(G2)} components)")
     
     plt.tight_layout()
     return fig
 
 def calculate_matrix_similarities(G1, G2):
     """Calculate similarities based on adjacency matrices"""
-    # Get adjacency matrices
+    # Get the maximum number of nodes
+    max_nodes = max(len(G1), len(G2))
+    
+    # Create padded adjacency matrices
     A1 = nx.adjacency_matrix(G1).todense()
     A2 = nx.adjacency_matrix(G2).todense()
     
+    # Pad matrices to the same size
+    A1_padded = np.zeros((max_nodes, max_nodes))
+    A2_padded = np.zeros((max_nodes, max_nodes))
+    
+    A1_padded[:A1.shape[0], :A1.shape[1]] = A1
+    A2_padded[:A2.shape[0], :A2.shape[1]] = A2
+    
+    # Flatten padded matrices
+    A1_flat = A1_padded.flatten()
+    A2_flat = A2_padded.flatten()
+    
     # Jaccard similarity
-    A1_flat = np.array(A1).flatten()
-    A2_flat = np.array(A2).flatten()
     intersection = np.sum(np.logical_and(A1_flat, A2_flat))
     union = np.sum(np.logical_or(A1_flat, A2_flat))
     jaccard = intersection / union if union != 0 else 0
@@ -118,8 +165,8 @@ def calculate_matrix_similarities(G1, G2):
     
     # Spectral similarity (using top k eigenvalues)
     k = min(len(G1), len(G2))
-    eig1 = sorted(np.real(eigvals(A1)))[-k:]
-    eig2 = sorted(np.real(eigvals(A2)))[-k:]
+    eig1 = sorted(np.real(eigvals(A1_padded)))[-k:]
+    eig2 = sorted(np.real(eigvals(A2_padded)))[-k:]
     spectral_diff = np.linalg.norm(np.array(eig1) - np.array(eig2))
     spectral_sim = 1 / (1 + spectral_diff)
     
@@ -146,8 +193,10 @@ def get_metric_explanations():
         'Number of Edges Match': 'Checks if both graphs have the same number of edges/connections.',
         'Degree Sequence Match': 'Compares the sorted sequence of node degrees (number of connections per node) between graphs.',
         'Density Match': 'Compares the density (ratio of actual edges to possible edges) between graphs.',
-        'Average Path Length Match': 'Compares the average shortest path length between all pairs of nodes.',
-        'Diameter Match': 'Compares the maximum shortest path length between any two nodes in the graphs.',
+        'Connected Components Match': 'Checks if both graphs have the same number of disconnected parts.',
+        'Both Graphs Connected': 'Indicates whether both graphs are fully connected (no isolated parts).',
+        'Average Path Length Match': 'Compares the average shortest path length (only for connected graphs).',
+        'Diameter Match': 'Compares the maximum shortest path length (only for connected graphs).',
         
         # Node-level Metrics
         'Degree Distribution Match': 'Compares the frequency distribution of node degrees between graphs.',
@@ -165,38 +214,59 @@ def get_metric_explanations():
     return base_explanations
 
 def main():
-    st.title("Graph Similarity Comparison")
-    st.write("Compare two graphs for structural and node-level similarity")
+    st.set_page_config(layout="wide", page_title="Graph Similarity Comparison")
     
-    # Add help text
-    with st.expander("ℹ️ How to use this app"):
-        st.write("""
-        1. Enter the edges for each graph in the text areas below
-        2. Use one edge per line in format: 'node1 node2' or 'node1,node2'
-        3. Nodes should be numbered (e.g., 1, 2, 3...)
-        4. The app will compare the graphs and show various similarity metrics
-        """)
+    # Title and description in a container
+    with st.container():
+        st.title("Graph Similarity Comparison")
+        st.write("Compare two graphs for structural and node-level similarity")
     
-    # Create two columns for input
+    # Help section in a container
+    with st.container():
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            with st.expander("ℹ️ How to use this app"):
+                st.write("""
+                1. Enter the edges for each graph in the text areas below
+                2. Use one edge per line in format: 'node1 node2' or 'node1,node2'
+                3. Nodes should be numbered (e.g., 1, 2, 3...)
+                4. The app will compare the graphs and show various similarity metrics
+                """)
+        with col2:
+            with st.expander("📖 How to interpret results"):
+                st.write("""
+                - ✅ indicates exact matches between the two graphs
+                - ❌ indicates differences between the graphs
+                - Similarity values (0.0 to 1.0):
+                    - 1.0 = perfectly similar
+                    - 0.0 = completely different
+                - For differences, closer to 0.0 is more similar
+                """)
+    
+    # Graph input section
+    st.markdown("---")
+    st.subheader("📊 Graph Input")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Graph 1 Edges")
+        st.markdown("### Graph 1")
         graph1_input = st.text_area(
-            "Enter edges (one per line, format: 'node1 node2' or 'node1,node2')",
+            "Enter edges for Graph 1",
             value="1 2\n2 3\n3 4\n4 1\n2 4",
-            key="graph1"
+            key="graph1",
+            height=150
         )
     
     with col2:
-        st.subheader("Graph 2 Edges")
+        st.markdown("### Graph 2")
         graph2_input = st.text_area(
-            "Enter edges (one per line, format: 'node1 node2' or 'node1,node2')",
+            "Enter edges for Graph 2",
             value="5 6\n6 7\n7 8\n8 5\n6 8",
-            key="graph2"
+            key="graph2",
+            height=150
         )
     
-    # Create graphs from input
+    # Process graphs and show results
     edges1 = parse_edge_input(graph1_input)
     edges2 = parse_edge_input(graph2_input)
     
@@ -209,60 +279,69 @@ def main():
         # Get metric explanations
         explanations = get_metric_explanations()
         
-        # Compare and display results
-        st.subheader("Comparison Results")
-        
-        # Matrix-based similarities
-        st.write("Matrix-based Similarity Metrics:")
-        matrix_sim = calculate_matrix_similarities(G1, G2)
-        for metric, value in matrix_sim.items():
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"- {metric}")
-                st.caption(explanations[metric])
-            with col2:
-                st.write(f"{value:.4f}")
-        
-        # Structural similarity with explanations
-        st.write("\nStructural Similarity Metrics:")
-        struct_sim = compare_structural_similarity(G1, G2)
-        for metric, value in struct_sim.items():
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"- {metric}")
-                st.caption(explanations[metric])
-            with col2:
-                st.write(f"{'✅' if value else '❌'}")
-        
-        # Node similarity with explanations
-        st.write("\nNode-level Similarity Metrics:")
-        node_sim = compare_node_similarity(G1, G2)
-        for metric, value in node_sim.items():
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"- {metric}")
-                st.caption(explanations[metric])
-            with col2:
-                if isinstance(value, bool):
-                    st.write(f"{'✅' if value else '❌'}")
-                else:
-                    st.write(f"{value:.4f}")
-        
-        # Update interpretation guide
-        with st.expander("📖 How to interpret the results"):
-            st.write("""
-            - ✅ indicates exact matches between the two graphs for that metric
-            - ❌ indicates differences between the graphs
-            - Numerical similarity values range from 0.0 to 1.0:
-                - 1.0 means perfectly similar
-                - 0.0 means completely different
-            - Difference values (closer to 0.0 is more similar)
-            """)
-        
-        # Visualization
-        st.subheader("Graph Visualization")
+        # Visualization section first
+        st.markdown("---")
+        st.subheader("🎨 Graph Visualization")
         fig = plot_graphs(G1, G2)
         st.pyplot(fig)
+        
+        # Results section second
+        st.markdown("---")
+        st.subheader("📈 Comparison Results")
+        
+        # Create tabs for different metric categories
+        tab1, tab2, tab3 = st.tabs([
+            "Matrix-based Similarities", 
+            "Structural Similarities", 
+            "Node-level Similarities"
+        ])
+        
+        # Matrix-based similarities tab
+        with tab1:
+            matrix_sim = calculate_matrix_similarities(G1, G2)
+            for metric, value in matrix_sim.items():
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{metric}**")
+                        st.caption(explanations[metric])
+                    with col2:
+                        st.metric(
+                            label=metric,
+                            value=f"{value:.4f}",
+                            label_visibility="collapsed"
+                        )
+        
+        # Structural similarities tab
+        with tab2:
+            struct_sim = compare_structural_similarity(G1, G2)
+            for metric, value in struct_sim.items():
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{metric}**")
+                        st.caption(explanations[metric])
+                    with col2:
+                        st.write(f"{'✅' if value else '❌'}")
+        
+        # Node-level similarities tab
+        with tab3:
+            node_sim = compare_node_similarity(G1, G2)
+            for metric, value in node_sim.items():
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{metric}**")
+                        st.caption(explanations[metric])
+                    with col2:
+                        if isinstance(value, bool):
+                            st.write(f"{'✅' if value else '❌'}")
+                        else:
+                            st.metric(
+                                label=metric,
+                                value=f"{value:.4f}",
+                                label_visibility="collapsed"
+                            )
 
 if __name__ == "__main__":
     main() 
