@@ -5,8 +5,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import cosine
 from scipy.linalg import eigvals
-from node2vec import Node2Vec
-from gensim.models import KeyedVectors
+from sklearn.manifold import SpectralEmbedding
 from sklearn.metrics.pairwise import cosine_similarity
 
 def create_sample_graphs():
@@ -217,29 +216,59 @@ def calculate_matrix_similarities(G1, G2):
         'Graph Edit Distance Similarity': {'value': ged_sim, 'steps': ged_steps}
     }
 
-def get_graph_embedding(G, dimensions=8, walk_length=30, num_walks=200):
-    """Generate graph embedding using node2vec"""
-    # Initialize node2vec model
-    node2vec = Node2Vec(
-        G,
-        dimensions=dimensions,
-        walk_length=walk_length,
-        num_walks=num_walks,
-        workers=1  # Single worker for reproducibility
-    )
+def get_graph_embedding(G, dimensions=8):
+    """使用譜嵌入生成圖嵌入，增強了對不連通圖的處理"""
+    # 檢查圖的大小和連通性
+    n_nodes = len(G)
     
-    # Train the model
-    model = node2vec.fit(window=10, min_count=1)
+    # 調整維度，確保不超過節點數
+    actual_dimensions = min(dimensions, max(1, n_nodes - 1))
     
-    # Get embeddings for all nodes
-    node_embeddings = {}
-    for node in G.nodes():
-        node_embeddings[node] = model.wv[str(node)]
+    # 對於小圖特別處理
+    if n_nodes <= 2:
+        # 對於非常小的圖，使用簡單的特徵表示
+        random_state = np.random.RandomState(42)
+        embeddings = random_state.rand(n_nodes, actual_dimensions)
+        node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
+        graph_embedding = np.mean(embeddings, axis=0)
+        return graph_embedding, node_embeddings
     
-    # Calculate graph embedding as mean of node embeddings
-    graph_embedding = np.mean(list(node_embeddings.values()), axis=0)
+    # 獲取鄰接矩陣
+    A = nx.adjacency_matrix(G).todense()
     
-    return graph_embedding, node_embeddings
+    try:
+        # 處理不連通圖
+        if not nx.is_connected(G):
+            # 為不連通的部分添加很小的連接權重
+            A = A + np.eye(n_nodes) * 1e-6
+        
+        # 創建譜嵌入，使用調整後的維度
+        embedding = SpectralEmbedding(
+            n_components=actual_dimensions,
+            random_state=42,
+            affinity='precomputed',  # 直接使用鄰接矩陣
+            eigen_solver='arpack' if n_nodes > 10 else 'dense'  # 根據圖大小選擇求解器
+        )
+        
+        # 計算嵌入
+        embeddings = embedding.fit_transform(A)
+        
+        # 創建節點嵌入字典
+        node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
+        
+        # 計算圖嵌入
+        graph_embedding = np.mean(embeddings, axis=0)
+        
+        return graph_embedding, node_embeddings
+        
+    except Exception as e:
+        # 如果譜嵌入失敗，使用後備方案
+        st.warning(f"使用後備嵌入方法。原因：{str(e)}")
+        random_state = np.random.RandomState(42)
+        embeddings = random_state.rand(n_nodes, actual_dimensions)
+        node_embeddings = {node: embeddings[i] for i, node in enumerate(G.nodes())}
+        graph_embedding = np.mean(embeddings, axis=0)
+        return graph_embedding, node_embeddings
 
 def compare_embeddings(G1, G2):
     """Compare graphs using embeddings"""
