@@ -11,15 +11,19 @@ import rdflib
 from rdflib import Graph as RDFGraph
 from io import StringIO
 
-def create_sample_graphs():
+def create_sample_graphs(directed=False):
+    """Create sample graphs with option for directed graphs"""
+    # Use DiGraph for directed graphs, regular Graph for undirected
+    GraphType = nx.DiGraph if directed else nx.Graph
+    
     # First graph
-    G1 = nx.Graph()
+    G1 = GraphType()
     G1.add_edges_from([
         (1, 2), (2, 3), (3, 4), (4, 1), (2, 4)
     ])
     
     # Second graph - similar structure but different node labels
-    G2 = nx.Graph()
+    G2 = GraphType()
     G2.add_edges_from([
         (5, 6), (6, 7), (7, 8), (8, 5), (6, 8)
     ])
@@ -106,15 +110,19 @@ def parse_rdf_input(rdf_text, format='turtle'):
         return None
 
 def compare_structural_similarity(G1, G2):
-    """Compare graphs based on structural properties with actual values"""
+    """Compare graphs based on structural properties with actual values, supporting directed graphs"""
     
-    # Check if graphs are connected
-    is_G1_connected = nx.is_connected(G1)
-    is_G2_connected = nx.is_connected(G2)
+    # Check if graphs are connected (use appropriate function for directed graphs)
+    is_G1_connected = (nx.is_weakly_connected(G1) if isinstance(G1, nx.DiGraph) 
+                      else nx.is_connected(G1))
+    is_G2_connected = (nx.is_weakly_connected(G2) if isinstance(G2, nx.DiGraph)
+                      else nx.is_connected(G2))
     
     # Get connected components count
-    G1_components = nx.number_connected_components(G1)
-    G2_components = nx.number_connected_components(G2)
+    G1_components = (nx.number_weakly_connected_components(G1) if isinstance(G1, nx.DiGraph)
+                    else nx.number_connected_components(G1))
+    G2_components = (nx.number_weakly_connected_components(G2) if isinstance(G2, nx.DiGraph)
+                    else nx.number_connected_components(G2))
     
     # Calculate average path length and diameter only if graphs are connected
     try:
@@ -162,75 +170,129 @@ def compare_structural_similarity(G1, G2):
         }
     }
     
-    # Add path-based metrics only if both graphs are connected
-    if is_G1_connected and is_G2_connected:
+    # Add path-based metrics only if both graphs are connected and values are not None
+    if is_G1_connected and is_G2_connected and avg_path_G1 is not None and avg_path_G2 is not None:
         similarity_metrics.update({
             'Average Path Length Match': {
                 'match': abs(avg_path_G1 - avg_path_G2) < 1e-9,
                 'values': (f"{avg_path_G1:.4f}", f"{avg_path_G2:.4f}")
-            },
-            'Diameter Match': {
-                'match': diameter_G1 == diameter_G2,
-                'values': (diameter_G1, diameter_G2)
             }
         })
+        
+        if diameter_G1 is not None and diameter_G2 is not None:
+            similarity_metrics.update({
+                'Diameter Match': {
+                    'match': diameter_G1 == diameter_G2,
+                    'values': (diameter_G1, diameter_G2)
+                }
+            })
     
     return similarity_metrics
 
+def safe_centrality_calculation(G, centrality_func):
+    """Calculate centrality with support for both directed and undirected graphs"""
+    try:
+        if isinstance(G, nx.DiGraph):
+            # For directed graphs, try to use specific directed versions if available
+            if centrality_func == nx.closeness_centrality:
+                return nx.closeness_centrality(G)
+            elif centrality_func == nx.betweenness_centrality:
+                return nx.betweenness_centrality(G)
+            else:
+                return {}  # Return empty dict for unsupported metrics
+        else:
+            # Original logic for undirected graphs
+            if nx.is_connected(G):
+                return centrality_func(G)
+            else:
+                centrality_dict = {}
+                for component in nx.connected_components(G):
+                    subgraph = G.subgraph(component)
+                    centrality_dict.update(centrality_func(subgraph))
+                return centrality_dict
+    except nx.NetworkXNotImplemented:
+        return {}  # Return empty dict for unsupported metrics
+    except Exception as e:
+        st.warning(f"Error calculating centrality: {str(e)}")
+        return {}
+
 def compare_node_similarity(G1, G2):
     """Compare node-level properties between graphs"""
+    metrics = {}
     
-    deg_dist1 = Counter([d for n, d in G1.degree()])
-    deg_dist2 = Counter([d for n, d in G2.degree()])
+    try:
+        # Degree distribution (works for both directed and undirected)
+        deg_dist1 = Counter([d for n, d in G1.degree()])
+        deg_dist2 = Counter([d for n, d in G2.degree()])
+        metrics['Degree Distribution Match'] = deg_dist1 == deg_dist2
+    except Exception as e:
+        st.warning(f"Error calculating degree distribution: {str(e)}")
+        metrics['Degree Distribution Match'] = False
     
-    clustering1 = nx.average_clustering(G1)
-    clustering2 = nx.average_clustering(G2)
-    
-    # Calculate centrality measures for each component if graphs are disconnected
-    def safe_centrality_calculation(G, centrality_func):
-        if nx.is_connected(G):
-            return centrality_func(G)
+    try:
+        # Clustering coefficient (show unsupported for directed graphs)
+        if isinstance(G1, nx.DiGraph) or isinstance(G2, nx.DiGraph):
+            metrics['Clustering Coefficient Difference'] = "Unsupported for directed graphs"
         else:
-            # Calculate for each component and combine
-            centrality_dict = {}
-            for component in nx.connected_components(G):
-                subgraph = G.subgraph(component)
-                centrality_dict.update(centrality_func(subgraph))
-            return centrality_dict
+            clustering1 = nx.average_clustering(G1)
+            clustering2 = nx.average_clustering(G2)
+            metrics['Clustering Coefficient Difference'] = abs(clustering1 - clustering2)
+    except Exception as e:
+        st.warning(f"Error calculating clustering coefficient: {str(e)}")
+        metrics['Clustering Coefficient Difference'] = "Error in calculation"
     
     # Calculate centrality measures safely
-    betweenness1 = safe_centrality_calculation(G1, nx.betweenness_centrality)
-    betweenness2 = safe_centrality_calculation(G2, nx.betweenness_centrality)
+    try:
+        if isinstance(G1, nx.DiGraph) or isinstance(G2, nx.DiGraph):
+            metrics['Average Betweenness Difference'] = "Unsupported for directed graphs"
+            metrics['Average Closeness Difference'] = "Unsupported for directed graphs"
+        else:
+            betweenness1 = safe_centrality_calculation(G1, nx.betweenness_centrality)
+            betweenness2 = safe_centrality_calculation(G2, nx.betweenness_centrality)
+            closeness1 = safe_centrality_calculation(G1, nx.closeness_centrality)
+            closeness2 = safe_centrality_calculation(G2, nx.closeness_centrality)
+            
+            if betweenness1 and betweenness2:
+                metrics['Average Betweenness Difference'] = abs(
+                    sum(betweenness1.values())/len(betweenness1) - 
+                    sum(betweenness2.values())/len(betweenness2)
+                )
+            else:
+                metrics['Average Betweenness Difference'] = "Unsupported for this graph type"
+                
+            if closeness1 and closeness2:
+                metrics['Average Closeness Difference'] = abs(
+                    sum(closeness1.values())/len(closeness1) - 
+                    sum(closeness2.values())/len(closeness2)
+                )
+            else:
+                metrics['Average Closeness Difference'] = "Unsupported for this graph type"
+    except Exception as e:
+        st.warning(f"Error calculating centrality metrics: {str(e)}")
+        metrics['Average Betweenness Difference'] = "Error in calculation"
+        metrics['Average Closeness Difference'] = "Error in calculation"
     
-    closeness1 = safe_centrality_calculation(G1, nx.closeness_centrality)
-    closeness2 = safe_centrality_calculation(G2, nx.closeness_centrality)
-    
-    node_metrics = {
-        'Degree Distribution Match': deg_dist1 == deg_dist2,
-        'Clustering Coefficient Difference': abs(clustering1 - clustering2),
-        'Average Betweenness Difference': abs(sum(betweenness1.values())/len(betweenness1) - 
-                                            sum(betweenness2.values())/len(betweenness2)),
-        'Average Closeness Difference': abs(sum(closeness1.values())/len(closeness1) - 
-                                          sum(closeness2.values())/len(closeness2))
-    }
-    
-    return node_metrics
+    return metrics
 
 def plot_graphs(G1, G2):
-    """Create a matplotlib figure with both graphs"""
+    """Create a matplotlib figure with both graphs, supporting directed graphs"""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
     # Plot first graph with spring layout
-    pos1 = nx.spring_layout(G1, k=1)  # Increased k for better spacing of components
+    pos1 = nx.spring_layout(G1, k=1)
     nx.draw(G1, pos1, ax=ax1, with_labels=True, node_color='lightblue', 
-            node_size=500, font_size=16)
-    ax1.set_title(f"Graph 1 ({nx.number_connected_components(G1)} components)")
+            node_size=500, font_size=16,
+            arrows=isinstance(G1, nx.DiGraph),  # Show arrows if directed
+            arrowsize=20)
+    ax1.set_title(f"Graph 1 ({nx.number_weakly_connected_components(G1) if isinstance(G1, nx.DiGraph) else nx.number_connected_components(G1)} components)")
     
     # Plot second graph with spring layout
-    pos2 = nx.spring_layout(G2, k=1)  # Increased k for better spacing of components
+    pos2 = nx.spring_layout(G2, k=1)
     nx.draw(G2, pos2, ax=ax2, with_labels=True, node_color='lightgreen', 
-            node_size=500, font_size=16)
-    ax2.set_title(f"Graph 2 ({nx.number_connected_components(G2)} components)")
+            node_size=500, font_size=16,
+            arrows=isinstance(G2, nx.DiGraph),  # Show arrows if directed
+            arrowsize=20)
+    ax2.set_title(f"Graph 2 ({nx.number_weakly_connected_components(G2) if isinstance(G2, nx.DiGraph) else nx.number_connected_components(G2)} components)")
     
     plt.tight_layout()
     return fig
@@ -568,6 +630,27 @@ def get_metric_explanations():
     
     return base_explanations
 
+def display_metric(metric_name, value):
+    """Display a metric with appropriate formatting based on its type"""
+    with st.container():
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.write(f"**{metric_name}**")
+            if isinstance(value, str) and "Unsupported" in value:
+                st.info(value)
+            elif isinstance(value, str) and "Error" in value:
+                st.error(value)
+            else:
+                if isinstance(value, bool):
+                    st.write(f"{'✅' if value else '❌'}")
+                else:
+                    with col2:
+                        st.metric(
+                            label=metric_name,
+                            value=f"{value:.4f}" if isinstance(value, (float, int)) else value,
+                            label_visibility="collapsed"
+                        )
+
 def main():
     st.set_page_config(layout="wide", page_title="Graph Similarity Comparison")
     
@@ -582,20 +665,26 @@ def main():
         with col1:
             with st.expander("ℹ️ How to use this app"):
                 st.write("""
-                1. Select your preferred input format:
+                1. Select graph type:
+                   - Undirected: Edges have no direction
+                   - Directed: Edges have direction (from source to target)
+                
+                2. Select your preferred input format:
                    - Edge List: Simple space-separated node pairs (e.g., "1 2")
                    - TTL (Triple): Semantic triple format
                    - RDF/XML: RDF in XML format
                    - N-Triples: RDF in N-Triples format
                 
-                2. For Edge List format:
+                3. For Edge List format:
                    - Enter one edge per line as "node1 node2" or "node1,node2"
+                   - For directed graphs, edge goes from node1 to node2
                    - Use numeric node IDs
                 
-                3. For RDF formats (TTL/XML/N-Triples):
+                4. For RDF formats (TTL/XML/N-Triples):
                    - Use appropriate format syntax
                    - Nodes can be URIs or simple strings
                    - The app will convert node identifiers to numbers
+                   - Direction is preserved from subject to object
                 """)
         with col2:
             with st.expander("📖 How to interpret results"):
@@ -607,6 +696,13 @@ def main():
                     - 0.0 = completely different
                 - For differences, closer to 0.0 is more similar
                 """)
+    
+    # Add graph type selection
+    graph_type = st.radio(
+        "Select graph type",
+        ["Undirected", "Directed"],
+        horizontal=True
+    )
     
     # Add format selection
     input_format = st.radio(
@@ -731,8 +827,10 @@ def main():
         edges2 = parse_rdf_input(graph2_input, format=format_map[input_format])
     
     if edges1 and edges2:
-        G1 = nx.Graph()
-        G2 = nx.Graph()
+        # Create appropriate graph type based on selection
+        GraphType = nx.DiGraph if graph_type == "Directed" else nx.Graph
+        G1 = GraphType()
+        G2 = GraphType()
         G1.add_edges_from(edges1)
         G2.add_edges_from(edges2)
         
@@ -833,26 +931,7 @@ def main():
         with tab3:
             node_sim = compare_node_similarity(G1, G2)
             for metric, value in node_sim.items():
-                with st.container():
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**{metric}**")
-                        explanation = explanations[metric]
-                        if isinstance(explanation, dict):
-                            st.caption(explanation['description'])
-                            with st.expander("Show Formula"):
-                                st.latex(explanation['formula'])
-                        else:
-                            st.caption(explanation)
-                    with col2:
-                        if isinstance(value, bool):
-                            st.write(f"{'✅' if value else '❌'}")
-                        else:
-                            st.metric(
-                                label=metric,
-                                value=f"{value:.4f}",
-                                label_visibility="collapsed"
-                            )
+                display_metric(metric, value)
         
         # Embedding-based similarities tab
         with tab4:

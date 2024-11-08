@@ -2,11 +2,14 @@
 
 ![Graph Comparison Tool](graph_comparison.png)
 
-A Streamlit web application for comparing two graphs using various similarity metrics. This tool supports multiple input formats including Edge List, RDF, and Triple formats, providing visual and quantitative analysis of graph similarities through multiple comparison methods.
+A Streamlit web application for comparing both directed and undirected graphs using various similarity metrics. This tool supports multiple input formats including Edge List, RDF, and Triple formats, providing visual and quantitative analysis of graph similarities through multiple comparison methods.
 
 ## Features
 
 - Interactive web interface with:
+  - Graph type selection:
+    - Undirected graphs
+    - Directed graphs (with arrow visualization)
   - Multiple input format support:
     - Edge List (simple node pairs)
     - TTL (Triple) format
@@ -16,7 +19,7 @@ A Streamlit web application for comparing two graphs using various similarity me
   - Tabbed results display with detailed metric explanations and formulas
 
 - Comprehensive similarity metrics:
-  1. Matrix-based Similarities:
+  1. Matrix-based Similarities (supports both directed and undirected):
      - Jaccard Similarity (ratio of common edges to total edges)
      - Cosine Similarity (adjacency matrix angle comparison)
      - Spectral Similarity (eigenvalue-based structural comparison)
@@ -26,18 +29,18 @@ A Streamlit web application for comparing two graphs using various similarity me
      - Node and edge count matching
      - Degree sequence comparison
      - Graph density analysis
-     - Connected components detection
+     - Connected components detection (uses weak connectivity for directed graphs)
      - Average path length comparison (for connected graphs)
      - Graph diameter analysis (for connected graphs)
 
   3. Node-level Properties:
      - Degree distribution patterns
-     - Clustering coefficient measurement
-     - Betweenness centrality analysis
-     - Closeness centrality comparison
+     - Clustering coefficient measurement (undirected only)
+     - Betweenness centrality analysis (undirected only)
+     - Closeness centrality comparison (undirected only)
 
   4. Embedding-based Similarities:
-     - Graph-level embedding similarity using node2vec
+     - Graph-level embedding similarity
      - Average node embedding similarity
      - Node embedding distribution visualization
 
@@ -56,10 +59,14 @@ A Streamlit web application for comparing two graphs using various similarity me
 
 ## Usage
 
-1. Select Input Format:
+1. Select Graph Type:
+   - Choose between Undirected and Directed graphs
+   - Note that some metrics are only available for undirected graphs
+
+2. Select Input Format:
    Choose from four supported formats:
 
-   a. Edge List format:
+   a. Edge List format (direction: from first node to second):
    ```
    1 2
    2 3
@@ -68,14 +75,14 @@ A Streamlit web application for comparing two graphs using various similarity me
    2 4
    ```
 
-   b. TTL (Triple) format:
+   b. TTL (Triple) format (direction: from subject to object):
    ```
    <node1> <connects> <node2> .
    <node2> <connects> <node3> .
    <node3> <connects> <node4> .
    ```
 
-   c. RDF/XML format:
+   c. RDF/XML format (direction: from subject to object):
    ```xml
    <?xml version="1.0"?>
    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -86,44 +93,47 @@ A Streamlit web application for comparing two graphs using various similarity me
    </rdf:RDF>
    ```
 
-   d. N-Triples format:
+   d. N-Triples format (direction: from subject to object):
    ```
    <http://example.org/node1> <http://example.org/connects> <http://example.org/node2> .
    <http://example.org/node2> <http://example.org/connects> <http://example.org/node3> .
    ```
 
-2. Input Graph Data:
+3. Input Graph Data:
    - Enter graph data in the selected format for both graphs
-   - For RDF formats, the tool will automatically extract numeric node IDs or generate them from URIs
+   - For directed graphs, edge direction follows input order
+   - For RDF formats, direction goes from subject to object
+   - The tool automatically extracts or generates numeric node IDs
 
-3. View Results:
-   - Graph visualizations with component counts
-   - Detailed similarity metrics across four categories
+4. View Results:
+   - Graph visualizations with arrows for directed graphs
+   - Component counts (using weak connectivity for directed graphs)
+   - Detailed similarity metrics with clear indication of unsupported metrics
    - Interactive formulas and calculation steps
-   - Distribution visualizations for node embeddings
 
-4. Interpret Results:
+5. Interpret Results:
    - ✅ indicates exact matches between graphs
    - ❌ indicates differences between graphs
+   - "Unsupported for directed graphs" shown for inapplicable metrics
    - Similarity values range from 0.0 (different) to 1.0 (identical)
-   - For differences, values closer to 0.0 indicate more similarity
 
 ## Notes
 
-- Supports multiple input formats for flexibility
-- Automatically converts RDF node identifiers to numeric IDs
-- Handles both simple edge lists and semantic graph formats
-- Some metrics only available for connected graphs
-- Embedding calculations require connected graphs with sufficient nodes
-- Default examples provided for each input format
+- Supports both directed and undirected graph analysis
+- Some metrics (clustering, betweenness, closeness) only available for undirected graphs
+- Uses weak connectivity for directed graph components
+- Automatically handles metric availability based on graph type
+- Shows clear messages for unsupported metrics
+- Default examples provided for each input format and graph type
 
 ## Implementation Details
 
 - Uses NetworkX for graph operations and metrics
 - Implements RDFLib for parsing RDF formats
 - Calculates matrix similarities using numpy/scipy
-- Handles disconnected graphs by computing metrics per component
-- Provides detailed calculation steps and formulas
+- Handles both directed and undirected graph visualization
+- Provides appropriate metrics based on graph type
+- Shows arrows in visualization for directed graphs
 - Optimized visualization using matplotlib
 
 ## Live Demo
