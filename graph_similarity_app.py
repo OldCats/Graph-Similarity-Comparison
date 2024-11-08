@@ -7,6 +7,9 @@ from scipy.spatial.distance import cosine
 from scipy.linalg import eigvals
 from sklearn.manifold import SpectralEmbedding
 from sklearn.metrics.pairwise import cosine_similarity
+import rdflib
+from rdflib import Graph as RDFGraph
+from io import StringIO
 
 def create_sample_graphs():
     # First graph
@@ -67,6 +70,39 @@ def parse_triple_input(triple_text):
         return edges
     except ValueError as e:
         st.error(f"Invalid input format: {str(e)}\nPlease use TTL format: '<subject> <predicate> <object>'")
+        return None
+
+def parse_rdf_input(rdf_text, format='turtle'):
+    """Parse RDF input text into a list of edges"""
+    edges = []
+    try:
+        # Create RDF graph
+        g = RDFGraph()
+        
+        # Parse RDF content
+        g.parse(StringIO(rdf_text), format=format)
+        
+        # Extract edges from triples
+        for s, p, o in g:
+            # Convert URIs/literals to strings and extract numeric parts or hash
+            try:
+                # Try to extract numeric part from URIs
+                subject = str(s).split('/')[-1].strip('<>')
+                object_ = str(o).split('/')[-1].strip('<>')
+                
+                # Try to get numeric values
+                subject_num = int(''.join(filter(str.isdigit, subject)))
+                object_num = int(''.join(filter(str.isdigit, object_)))
+            except ValueError:
+                # If no numbers found, use hash of string modulo 1000
+                subject_num = hash(str(s)) % 1000
+                object_num = hash(str(o)) % 1000
+            
+            edges.append((subject_num, object_num))
+        
+        return edges
+    except Exception as e:
+        st.error(f"Error parsing RDF: {str(e)}")
         return None
 
 def compare_structural_similarity(G1, G2):
@@ -546,11 +582,20 @@ def main():
         with col1:
             with st.expander("ℹ️ How to use this app"):
                 st.write("""
-                1. Enter the triples for each graph in the text areas below
-                2. Use one triple per line in TTL format: '<subject> <predicate> <object>'
-                3. The predicate can be any relation (e.g., <connects>, <links>, etc.)
-                4. Nodes can be URIs or simple strings (e.g., <node1>, <http://example.org/node1>)
-                5. The app will convert node identifiers to numbers and compare the graphs
+                1. Select your preferred input format:
+                   - Edge List: Simple space-separated node pairs (e.g., "1 2")
+                   - TTL (Triple): Semantic triple format
+                   - RDF/XML: RDF in XML format
+                   - N-Triples: RDF in N-Triples format
+                
+                2. For Edge List format:
+                   - Enter one edge per line as "node1 node2" or "node1,node2"
+                   - Use numeric node IDs
+                
+                3. For RDF formats (TTL/XML/N-Triples):
+                   - Use appropriate format syntax
+                   - Nodes can be URIs or simple strings
+                   - The app will convert node identifiers to numbers
                 """)
         with col2:
             with st.expander("📖 How to interpret results"):
@@ -563,6 +608,20 @@ def main():
                 - For differences, closer to 0.0 is more similar
                 """)
     
+    # Add format selection
+    input_format = st.radio(
+        "Select input format",
+        ["Edge List", "TTL (Triple)", "RDF/XML", "N-Triples"],
+        horizontal=True
+    )
+    
+    format_map = {
+        "TTL (Triple)": "turtle",
+        "RDF/XML": "xml",
+        "N-Triples": "nt",
+        "Edge List": "edge_list"
+    }
+    
     # Graph input section
     st.markdown("---")
     st.subheader("📊 Graph Input")
@@ -570,25 +629,106 @@ def main():
     
     with col1:
         st.markdown("### Graph 1")
+        if input_format == "Edge List":
+            default_value = """1 2
+2 3
+3 4
+4 1
+2 4"""
+        elif input_format == "TTL (Triple)":
+            default_value = """<node1> <connects> <node2> .
+<node2> <connects> <node3> .
+<node3> <connects> <node4> .
+<node4> <connects> <node1> .
+<node2> <connects> <node4> ."""
+        elif input_format == "RDF/XML":
+            default_value = """<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:ex="http://example.org/">
+  <rdf:Description rdf:about="http://example.org/node1">
+    <ex:connects rdf:resource="http://example.org/node2"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node2">
+    <ex:connects rdf:resource="http://example.org/node3"/>
+    <ex:connects rdf:resource="http://example.org/node4"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node3">
+    <ex:connects rdf:resource="http://example.org/node4"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node4">
+    <ex:connects rdf:resource="http://example.org/node1"/>
+  </rdf:Description>
+</rdf:RDF>"""
+        else:  # N-Triples
+            default_value = """<http://example.org/node1> <http://example.org/connects> <http://example.org/node2> .
+<http://example.org/node2> <http://example.org/connects> <http://example.org/node3> .
+<http://example.org/node3> <http://example.org/connects> <http://example.org/node4> .
+<http://example.org/node4> <http://example.org/connects> <http://example.org/node1> .
+<http://example.org/node2> <http://example.org/connects> <http://example.org/node4> ."""
+        
         graph1_input = st.text_area(
-            "Enter triples for Graph 1 (TTL format)",
-            value="<node1> <connects> <node2>\n<node2> <connects> <node3>\n<node3> <connects> <node4>\n<node4> <connects> <node1>\n<node2> <connects> <node4>",
+            f"Enter Graph 1 in {input_format} format",
+            value=default_value,
             key="graph1",
-            height=150
+            height=200
         )
     
     with col2:
         st.markdown("### Graph 2")
+        if input_format == "Edge List":
+            default_value = """5 6
+6 7
+7 8
+8 5
+6 8"""
+        elif input_format == "TTL (Triple)":
+            default_value = """<node5> <connects> <node6> .
+<node6> <connects> <node7> .
+<node7> <connects> <node8> .
+<node8> <connects> <node5> .
+<node6> <connects> <node8> ."""
+        elif input_format == "RDF/XML":
+            default_value = """<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:ex="http://example.org/">
+  <rdf:Description rdf:about="http://example.org/node5">
+    <ex:connects rdf:resource="http://example.org/node6"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node6">
+    <ex:connects rdf:resource="http://example.org/node7"/>
+    <ex:connects rdf:resource="http://example.org/node8"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node7">
+    <ex:connects rdf:resource="http://example.org/node8"/>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/node8">
+    <ex:connects rdf:resource="http://example.org/node5"/>
+  </rdf:Description>
+</rdf:RDF>"""
+        else:  # N-Triples
+            default_value = """<http://example.org/node5> <http://example.org/connects> <http://example.org/node6> .
+<http://example.org/node6> <http://example.org/connects> <http://example.org/node7> .
+<http://example.org/node7> <http://example.org/connects> <http://example.org/node8> .
+<http://example.org/node8> <http://example.org/connects> <http://example.org/node5> .
+<http://example.org/node6> <http://example.org/connects> <http://example.org/node8> ."""
+        
         graph2_input = st.text_area(
-            "Enter triples for Graph 2 (TTL format)",
-            value="<node5> <connects> <node6>\n<node6> <connects> <node7>\n<node7> <connects> <node8>\n<node8> <connects> <node5>\n<node6> <connects> <node8>",
+            f"Enter Graph 2 in {input_format} format",
+            value=default_value,
             key="graph2",
-            height=150
+            height=200
         )
     
-    # Process graphs and show results
-    edges1 = parse_triple_input(graph1_input)
-    edges2 = parse_triple_input(graph2_input)
+    # Process graphs based on selected format
+    if input_format == "Edge List":
+        edges1 = parse_edge_input(graph1_input)
+        edges2 = parse_edge_input(graph2_input)
+    elif input_format == "TTL (Triple)":
+        edges1 = parse_triple_input(graph1_input)
+        edges2 = parse_triple_input(graph2_input)
+    else:
+        edges1 = parse_rdf_input(graph1_input, format=format_map[input_format])
+        edges2 = parse_rdf_input(graph2_input, format=format_map[input_format])
     
     if edges1 and edges2:
         G1 = nx.Graph()
