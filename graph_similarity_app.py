@@ -40,6 +40,35 @@ def parse_edge_input(edge_text):
         st.error("Invalid input format. Please use format: 'node1 node2' or 'node1,node2' per line")
         return None
 
+def parse_triple_input(triple_text):
+    """Parse triple (TTL) input text into a list of edges"""
+    edges = []
+    try:
+        # Split the input into lines and process each line
+        lines = triple_text.strip().split('\n')
+        for line in lines:
+            if line.strip():
+                # Split on whitespace and extract subject and object
+                parts = line.strip().split()
+                if len(parts) >= 3:  # Must have subject, predicate, object
+                    subject = parts[0].strip('<>')  # Remove < > if present
+                    object_ = parts[2].strip('<>')  # Remove < > if present
+                    # Convert URIs/strings to integers for graph processing
+                    try:
+                        # Try to extract numeric part from URIs like "node1" or "http://example.org/node1"
+                        subject_num = int(''.join(filter(str.isdigit, subject)))
+                        object_num = int(''.join(filter(str.isdigit, object_)))
+                        edges.append((subject_num, object_num))
+                    except ValueError:
+                        # If no numbers found, use hash of string modulo 1000 as node ID
+                        subject_num = hash(subject) % 1000
+                        object_num = hash(object_) % 1000
+                        edges.append((subject_num, object_num))
+        return edges
+    except ValueError as e:
+        st.error(f"Invalid input format: {str(e)}\nPlease use TTL format: '<subject> <predicate> <object>'")
+        return None
+
 def compare_structural_similarity(G1, G2):
     """Compare graphs based on structural properties with actual values"""
     
@@ -517,10 +546,11 @@ def main():
         with col1:
             with st.expander("ℹ️ How to use this app"):
                 st.write("""
-                1. Enter the edges for each graph in the text areas below
-                2. Use one edge per line in format: 'node1 node2' or 'node1,node2'
-                3. Nodes should be numbered (e.g., 1, 2, 3...)
-                4. The app will compare the graphs and show various similarity metrics
+                1. Enter the triples for each graph in the text areas below
+                2. Use one triple per line in TTL format: '<subject> <predicate> <object>'
+                3. The predicate can be any relation (e.g., <connects>, <links>, etc.)
+                4. Nodes can be URIs or simple strings (e.g., <node1>, <http://example.org/node1>)
+                5. The app will convert node identifiers to numbers and compare the graphs
                 """)
         with col2:
             with st.expander("📖 How to interpret results"):
@@ -541,8 +571,8 @@ def main():
     with col1:
         st.markdown("### Graph 1")
         graph1_input = st.text_area(
-            "Enter edges for Graph 1",
-            value="1 2\n2 3\n3 4\n4 1\n2 4",
+            "Enter triples for Graph 1 (TTL format)",
+            value="<node1> <connects> <node2>\n<node2> <connects> <node3>\n<node3> <connects> <node4>\n<node4> <connects> <node1>\n<node2> <connects> <node4>",
             key="graph1",
             height=150
         )
@@ -550,15 +580,15 @@ def main():
     with col2:
         st.markdown("### Graph 2")
         graph2_input = st.text_area(
-            "Enter edges for Graph 2",
-            value="5 6\n6 7\n7 8\n8 5\n6 8",
+            "Enter triples for Graph 2 (TTL format)",
+            value="<node5> <connects> <node6>\n<node6> <connects> <node7>\n<node7> <connects> <node8>\n<node8> <connects> <node5>\n<node6> <connects> <node8>",
             key="graph2",
             height=150
         )
     
     # Process graphs and show results
-    edges1 = parse_edge_input(graph1_input)
-    edges2 = parse_edge_input(graph2_input)
+    edges1 = parse_triple_input(graph1_input)
+    edges2 = parse_triple_input(graph2_input)
     
     if edges1 and edges2:
         G1 = nx.Graph()
