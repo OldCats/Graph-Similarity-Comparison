@@ -299,89 +299,105 @@ def plot_graphs(G1, G2):
 
 def calculate_matrix_similarities(G1, G2):
     """Calculate similarities based on adjacency matrices with detailed steps"""
-    # Get the maximum number of nodes
-    max_nodes = max(len(G1), len(G2))
-    
-    # Create padded adjacency matrices
-    A1 = nx.adjacency_matrix(G1).todense()
-    A2 = nx.adjacency_matrix(G2).todense()
-    
-    # Pad matrices to the same size
-    A1_padded = np.zeros((max_nodes, max_nodes))
-    A2_padded = np.zeros((max_nodes, max_nodes))
-    
-    A1_padded[:A1.shape[0], :A1.shape[1]] = A1
-    A2_padded[:A2.shape[0], :A2.shape[1]] = A2
-    
-    # Flatten padded matrices
-    A1_flat = A1_padded.flatten()
-    A2_flat = A2_padded.flatten()
-    
-    # Jaccard similarity with steps
-    intersection = np.sum(np.logical_and(A1_flat, A2_flat))
-    union = np.sum(np.logical_or(A1_flat, A2_flat))
-    jaccard = intersection / union if union != 0 else 0
-    jaccard_steps = {
-        'intersection': int(intersection),
-        'union': int(union),
-        'value': jaccard
-    }
-    
-    # Cosine similarity with steps
-    dot_product = np.dot(A1_flat, A2_flat)
-    norm1 = np.linalg.norm(A1_flat)
-    norm2 = np.linalg.norm(A2_flat)
-    cosine_sim = 1 - cosine(A1_flat, A2_flat) if np.any(A1_flat) and np.any(A2_flat) else 0
-    cosine_steps = {
-        'dot_product': float(dot_product),
-        'norm1': float(norm1),
-        'norm2': float(norm2),
-        'value': cosine_sim
-    }
-    
-    # Spectral similarity with steps
-    k = min(len(G1), len(G2))
-    eig1 = sorted(np.real(eigvals(A1_padded)))[-k:]
-    eig2 = sorted(np.real(eigvals(A2_padded)))[-k:]
-    spectral_diff = np.linalg.norm(np.array(eig1) - np.array(eig2))
-    spectral_sim = 1 / (1 + spectral_diff)
-    spectral_steps = {
-        'eigenvalues1': eig1,
-        'eigenvalues2': eig2,
-        'spectral_diff': float(spectral_diff),
-        'value': spectral_sim
-    }
-    
-    # Graph Edit Distance similarity with steps
     try:
-        ged = nx.graph_edit_distance(G1, G2)
-        max_possible_ged = max(len(G1) + len(G2.edges()), len(G2) + len(G1.edges()))
-        ged_sim = 1 - (ged / max_possible_ged if max_possible_ged > 0 else 0)
-        ged_steps = {
-            'ged': ged,
-            'max_possible_ged': max_possible_ged,
-            'value': ged_sim
+        # Get the maximum number of nodes
+        max_nodes = max(len(G1), len(G2))
+        
+        # Create padded adjacency matrices
+        A1 = nx.adjacency_matrix(G1).todense()
+        A2 = nx.adjacency_matrix(G2).todense()
+        
+        # Pad matrices to the same size
+        A1_padded = np.zeros((max_nodes, max_nodes))
+        A2_padded = np.zeros((max_nodes, max_nodes))
+        
+        A1_padded[:A1.shape[0], :A1.shape[1]] = A1
+        A2_padded[:A2.shape[0], :A2.shape[1]] = A2
+        
+        # Flatten padded matrices
+        A1_flat = A1_padded.flatten()
+        A2_flat = A2_padded.flatten()
+        
+        # Jaccard similarity with steps
+        intersection = np.sum(np.logical_and(A1_flat, A2_flat))
+        union = np.sum(np.logical_or(A1_flat, A2_flat))
+        jaccard = intersection / union if union != 0 else 0
+        jaccard_steps = {
+            'intersection': int(intersection),
+            'union': int(union),
+            'value': jaccard
         }
-    except:
-        ged_sim = 0
-        ged_steps = {
-            'error': 'GED calculation failed',
-            'value': 0
+        
+        # Cosine similarity with steps
+        dot_product = np.dot(A1_flat, A2_flat)
+        norm1 = np.linalg.norm(A1_flat)
+        norm2 = np.linalg.norm(A2_flat)
+        cosine_sim = 1 - cosine(A1_flat, A2_flat) if np.any(A1_flat) and np.any(A2_flat) else 0
+        cosine_steps = {
+            'dot_product': float(dot_product),
+            'norm1': float(norm1),
+            'norm2': float(norm2),
+            'value': cosine_sim
         }
-    
-    return {
-        'Jaccard Similarity': {'value': jaccard, 'steps': jaccard_steps},
-        'Cosine Similarity': {'value': cosine_sim, 'steps': cosine_steps},
-        'Spectral Similarity': {'value': spectral_sim, 'steps': spectral_steps},
-        'Graph Edit Distance Similarity': {'value': ged_sim, 'steps': ged_steps}
-    }
+        
+        # Spectral similarity with steps
+        k = min(len(G1), len(G2))
+        eig1 = sorted(np.real(eigvals(A1_padded)))[-k:]
+        eig2 = sorted(np.real(eigvals(A2_padded)))[-k:]
+        spectral_diff = np.linalg.norm(np.array(eig1) - np.array(eig2))
+        spectral_sim = 1 / (1 + spectral_diff)
+        spectral_steps = {
+            'eigenvalues1': eig1,
+            'eigenvalues2': eig2,
+            'spectral_diff': float(spectral_diff),
+            'value': spectral_sim
+        }
+        
+        # Graph Edit Distance similarity with steps
+        try:
+            ged = nx.graph_edit_distance(G1, G2)
+            max_possible_ged = max(len(G1) + len(G2.edges()), len(G2) + len(G1.edges()))
+            ged_sim = 1 - (ged / max_possible_ged if max_possible_ged > 0 else 0)
+            ged_steps = {
+                'ged': ged,
+                'max_possible_ged': max_possible_ged,
+                'value': ged_sim
+            }
+        except:
+            ged_sim = 0
+            ged_steps = {
+                'error': 'GED calculation failed',
+                'value': 0
+            }
+        
+        return {
+            'Jaccard Similarity': {
+                'value': jaccard,
+                'steps': jaccard_steps
+            },
+            'Cosine Similarity': {
+                'value': cosine_sim,
+                'steps': cosine_steps
+            },
+            'Spectral Similarity': {
+                'value': spectral_sim,
+                'steps': spectral_steps
+            },
+            'Graph Edit Distance Similarity': {
+                'value': ged_sim,
+                'steps': ged_steps
+            }
+        }
+    except Exception as e:
+        st.error(f"Error calculating matrix similarities: {str(e)}")
+        return {}  # Return empty dict instead of None
 
 def get_graph_embedding(G, dimensions=8):
-    """使用改進的譜嵌入方法生成圖嵌入"""
+    """使用改進譜嵌入方法生成圖嵌入"""
     # 檢查圖的大小
     n_nodes = len(G)
     
-    # 調整維度，確保所有圖使用相同維度
+    # 調整維度，確保所圖使用相同維度
     actual_dimensions = min(8, max(1, n_nodes - 1))
     
     try:
@@ -396,7 +412,7 @@ def get_graph_embedding(G, dimensions=8):
         
         # 安全的標準化嵌入
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        # 避免除以零，如果範數為零，則用1替代
+        # 避免除以零，如果範數為零，則���1替代
         norms[norms == 0] = 1
         embeddings = embeddings / norms
         
@@ -444,7 +460,7 @@ def get_graph_embedding(G, dimensions=8):
             # 組合特徵
             embeddings = np.array(features).T  # 轉置使每行代表一個節點
             
-            # 如果需要更多維度，用零填充
+            # 如果要更多維度，用零填充
             if embeddings.shape[1] < actual_dimensions:
                 padding = np.zeros((embeddings.shape[0], actual_dimensions - embeddings.shape[1]))
                 embeddings = np.hstack([embeddings, padding])
@@ -461,7 +477,7 @@ def get_graph_embedding(G, dimensions=8):
             return graph_embedding, node_embeddings
             
         except Exception as e:
-            # 如果所有方法都失敗，返回隨機嵌入
+            # 如果所有方法都失敗，返��隨機嵌入
             st.warning(f"使用隨機嵌入。原因：{str(e)}")
             random_state = np.random.RandomState(42)
             embeddings = random_state.rand(n_nodes, actual_dimensions)
@@ -481,31 +497,22 @@ def compare_embeddings(G1, G2):
         graph1_emb = graph1_emb[:min_dim]
         graph2_emb = graph2_emb[:min_dim]
         
-        # Calculate graph-level similarity considering possible sign flips
+        # Calculate graph-level similarity
         graph_similarity = max(
             abs(cosine_similarity(graph1_emb.reshape(1, -1), graph2_emb.reshape(1, -1))[0][0]),
             abs(cosine_similarity(graph1_emb.reshape(1, -1), -graph2_emb.reshape(1, -1))[0][0])
         )
         
-        # Ensure node embeddings have consistent dimensions
-        for node in nodes1_emb:
-            nodes1_emb[node] = nodes1_emb[node][:min_dim]
-        for node in nodes2_emb:
-            nodes2_emb[node] = nodes2_emb[node][:min_dim]
-        
-        # Calculate node similarities considering structural roles rather than labels
+        # Calculate node similarities
         node_similarities = []
-        emb1_list = list(nodes1_emb.values())
-        emb2_list = list(nodes2_emb.values())
-        
-        # For each node in G1, find the best matching node in G2
-        for emb1 in emb1_list:
+        for emb1 in nodes1_emb.values():
             best_sim = -1
-            for emb2 in emb2_list:
-                # Consider both positive and negative alignments
+            for emb2 in nodes2_emb.values():
                 sim = max(
-                    abs(cosine_similarity(emb1.reshape(1, -1), emb2.reshape(1, -1))[0][0]),
-                    abs(cosine_similarity(emb1.reshape(1, -1), -emb2.reshape(1, -1))[0][0])
+                    abs(cosine_similarity(emb1[:min_dim].reshape(1, -1), 
+                                       emb2[:min_dim].reshape(1, -1))[0][0]),
+                    abs(cosine_similarity(emb1[:min_dim].reshape(1, -1), 
+                                       -emb2[:min_dim].reshape(1, -1))[0][0])
                 )
                 best_sim = max(best_sim, sim)
             node_similarities.append(best_sim)
@@ -525,92 +532,149 @@ def compare_embeddings(G1, G2):
                 'value': float(avg_node_similarity),
                 'steps': {
                     'individual_similarities': node_similarities,
-                    'average': float(avg_node_similarity)
+                    'average': float(avg_node_similarity),
+                    'num_comparisons': len(node_similarities)
                 }
             }
         }
     except Exception as e:
-        st.error(f"嵌入計算錯誤：{str(e)}")
-        # 返回預設值
-        return {
-            'Graph Embedding Similarity': {
-                'value': 0.0,
-                'steps': {
-                    'graph1_embedding': np.zeros(8),
-                    'graph2_embedding': np.zeros(8),
-                    'similarity': 0.0
-                }
-            },
-            'Average Node Embedding Similarity': {
-                'value': 0.0,
-                'steps': {
-                    'individual_similarities': [],
-                    'average': 0.0
-                }
-            }
-        }
+        st.error(f"Embedding calculation error: {str(e)}")
+        return {}
 
 def get_metric_explanations():
     """Return explanations and formulas for each metric"""
     base_explanations = {
-        # Matrix Similarity Metrics
+        # Matrix-based Metrics
         'Jaccard Similarity': {
-            'description': 'Measures similarity as ratio of common edges to total edges (1.0 = identical graphs)',
+            'description': 'Measures similarity as ratio of common edges to total edges',
             'formula': r"""
             J(A_1, A_2) = \frac{|A_1 \cap A_2|}{|A_1 \cup A_2|}
+            """,
+            'interpretation': """
+            - 1.0 indicates identical edge sets
+            - 0.0 indicates no common edges
+            - Works for both directed and undirected graphs
             """
         },
         'Cosine Similarity': {
-            'description': 'Measures similarity as cosine of angle between adjacency matrices (1.0 = identical graphs)',
+            'description': 'Measures similarity as cosine of angle between adjacency matrices',
             'formula': r"""
             \cos(A_1, A_2) = \frac{A_1 \cdot A_2}{||A_1|| \cdot ||A_2||}
+            """,
+            'interpretation': """
+            - 1.0 indicates identical structural patterns
+            - 0.0 indicates completely different patterns
+            - Works for both directed and undirected graphs
             """
         },
         'Spectral Similarity': {
-            'description': 'Compares graph structure using eigenvalues of adjacency matrices (1.0 = identical graphs)',
+            'description': 'Compares graph structure using eigenvalues of adjacency matrices',
             'formula': r"""
             S(A_1, A_2) = \frac{1}{1 + ||\lambda_1 - \lambda_2||}
+            """,
+            'interpretation': """
+            - Higher values indicate similar spectral properties
+            - Captures global structural similarity
+            - Works for both directed and undirected graphs
             """
         },
         'Graph Edit Distance Similarity': {
-            'description': 'Measures similarity based on minimum operations to transform one graph to another (1.0 = identical graphs)',
+            'description': 'Measures similarity based on minimum operations to transform one graph to another',
             'formula': r"""
             GED_{sim} = 1 - \frac{GED}{\max(|V_1| + |E_2|, |V_2| + |E_1|)}
-            """
-        },
-        
-        # Node-level Metrics
-        'Clustering Coefficient Difference': {
-            'description': 'Measures the difference in how much nodes tend to cluster together',
-            'formula': r"""
-            |C_1 - C_2|, \text{ where } C_i = \frac{3 \times \text{triangles}}{\text{total possible triangles}}
-            """
-        },
-        'Average Betweenness Difference': {
-            'description': 'Compares the average betweenness centrality, which measures how often a node acts as a bridge',
-            'formula': r"""
-            |\text{avg}(B_1) - \text{avg}(B_2)|, \text{ where }
-            B(v) = \sum_{s \neq v \neq t} \frac{\sigma_{st}(v)}{\sigma_{st}}
-            """
-        },
-        'Average Closeness Difference': {
-            'description': 'Compares the average closeness centrality, measuring how close each node is to all other nodes',
-            'formula': r"""
-            |\text{avg}(C_1) - \text{avg}(C_2)|, \text{ where }
-            C(v) = \frac{n-1}{\sum_{u \neq v} d(v,u)}
+            """,
+            'interpretation': """
+            - 1.0 indicates identical graphs
+            - Lower values indicate more operations needed
+            - Works for both directed and undirected graphs
             """
         },
 
-        # Structural Metrics (keeping original descriptions for boolean metrics)
-        'Number of Nodes Match': 'Checks if both graphs have the same number of vertices/nodes.',
-        'Number of Edges Match': 'Checks if both graphs have the same number of edges/connections.',
-        'Degree Sequence Match': 'Compares the sorted sequence of node degrees (number of connections per node) between graphs.',
-        'Density Match': 'Compares the density (ratio of actual edges to possible edges) between graphs.',
-        'Connected Components Match': 'Checks if both graphs have the same number of disconnected parts.',
-        'Both Graphs Connected': 'Indicates whether both graphs are fully connected (no isolated parts).',
-        'Average Path Length Match': 'Compares the average shortest path length (only for connected graphs).',
-        'Diameter Match': 'Compares the maximum shortest path length (only for connected graphs).',
-        'Degree Distribution Match': 'Compares the frequency distribution of node degrees between graphs.',
+        # Node-level Metrics
+        'Degree Distribution Match': {
+            'description': 'Compares the frequency distribution of node degrees between graphs',
+            'formula': r"""
+            \text{deg}(v) = \text{number of edges connected to node } v \\
+            \text{distribution} = \text{frequency count of each degree value}
+            """,
+            'interpretation': """
+            - Matches if both graphs have same frequency of node degrees
+            - Example: if both graphs have same number of nodes with degree 1, 2, etc.
+            """
+        },
+        'Clustering Coefficient Difference': {
+            'description': 'Measures how much nodes tend to cluster together (form triangles)',
+            'formula': r"""
+            C(v) = \frac{2L_v}{k_v(k_v-1)} \\
+            \text{where } L_v \text{ is number of edges between neighbors of } v \\
+            k_v \text{ is degree of node } v \\
+            \text{Graph clustering} = \frac{1}{n}\sum_{v \in V} C(v)
+            """,
+            'interpretation': """
+            - Values range from 0 (no clustering) to 1 (complete clustering)
+            - Smaller difference indicates more similar clustering patterns
+            - Unsupported for directed graphs
+            """
+        },
+        'Average Betweenness Difference': {
+            'description': 'Compares how often nodes act as bridges in shortest paths',
+            'formula': r"""
+            B(v) = \sum_{s \neq v \neq t} \frac{\sigma_{st}(v)}{\sigma_{st}} \\
+            \text{where } \sigma_{st} \text{ is total number of shortest paths from } s \text{ to } t \\
+            \sigma_{st}(v) \text{ is number of those paths passing through } v
+            """,
+            'interpretation': """
+            - Higher values indicate more important bridging nodes
+            - Smaller difference means similar network centrality patterns
+            - Unsupported for directed graphs
+            """
+        },
+        'Average Closeness Difference': {
+            'description': 'Compares how close nodes are to all other nodes',
+            'formula': r"""
+            C(v) = \frac{n-1}{\sum_{u \neq v} d(v,u)} \\
+            \text{where } d(v,u) \text{ is shortest path length between } v \text{ and } u \\
+            n \text{ is number of nodes}
+            """,
+            'interpretation': """
+            - Higher values indicate more central nodes
+            - Smaller difference means similar centrality patterns
+            - Unsupported for directed graphs
+            """
+        },
+
+        # Structural Metrics with formulas
+        'Number of Nodes Match': {
+            'description': 'Checks if both graphs have the same number of vertices/nodes',
+            'formula': r"""
+            |V_1| = |V_2|
+            """
+        },
+        'Number of Edges Match': {
+            'description': 'Checks if both graphs have the same number of edges/connections',
+            'formula': r"""
+            |E_1| = |E_2|
+            """
+        },
+        'Density Match': {
+            'description': 'Compares the density (ratio of actual edges to possible edges)',
+            'formula': r"""
+            D(G) = \frac{2|E|}{|V|(|V|-1)} \text{ for undirected} \\
+            D(G) = \frac{|E|}{|V|(|V|-1)} \text{ for directed}
+            """
+        },
+        'Average Path Length Match': {
+            'description': 'Compares the average shortest path length',
+            'formula': r"""
+            L(G) = \frac{1}{n(n-1)} \sum_{i \neq j} d(v_i, v_j)
+            """
+        },
+        'Diameter Match': {
+            'description': 'Compares the maximum shortest path length',
+            'formula': r"""
+            diam(G) = \max_{i,j} d(v_i, v_j)
+            """
+        },
         
         # Add embedding metrics
         'Graph Embedding Similarity': {
@@ -625,31 +689,157 @@ def get_metric_explanations():
             'formula': r"""
             sim = \frac{1}{|V_1||V_2|}\sum_{i \in V_1}\sum_{j \in V_2} \cos(emb(i), emb(j))
             """
-        }
+        },
+
+        # Add Degree Sequence Match explanation
+        'Degree Sequence Match': {
+            'description': 'Compares the sorted sequence of node degrees between graphs',
+            'formula': r"""
+            deg\_seq(G) = \text{sorted}([d_1, d_2, ..., d_n]) \\
+            \text{where } d_i \text{ is the degree of node } i
+            """,
+            'interpretation': """
+            - Matches if both graphs have identical degree sequences when sorted
+            - Indicates similar connectivity patterns between graphs
+            - Works for both directed and undirected graphs
+            """
+        },
+
+        'Connected Components Match': {
+            'description': 'Compares the number of connected components in both graphs',
+            'formula': r"""
+            \text{For undirected: } CC(G) = |\{\text{connected components}\}| \\
+            \text{For directed: } WCC(G) = |\{\text{weakly connected components}\}|
+            """,
+            'interpretation': """
+            - Matches if both graphs have same number of components
+            - Uses weak connectivity for directed graphs
+            - Indicates similar graph fragmentation
+            """
+        },
+
+        'Both Graphs Connected': {
+            'description': 'Checks if both graphs are fully connected',
+            'formula': r"""
+            \text{For undirected: } \text{is\_connected}(G) \\
+            \text{For directed: } \text{is\_weakly\_connected}(G)
+            """,
+            'interpretation': """
+            - True if both graphs are connected
+            - Uses weak connectivity for directed graphs
+            - Required for certain path-based metrics
+            """
+        },
     }
-    
     return base_explanations
 
-def display_metric(metric_name, value):
-    """Display a metric with appropriate formatting based on its type"""
+def display_metric_with_details(metric_name, value, explanation, actual_values=None):
+    """Unified display function for all metrics with details and actual values"""
     with st.container():
+        # Header row with metric name and value only
         col1, col2 = st.columns([3, 1])
         with col1:
             st.write(f"**{metric_name}**")
-            if isinstance(value, str) and "Unsupported" in value:
-                st.info(value)
-            elif isinstance(value, str) and "Error" in value:
-                st.error(value)
+            if isinstance(explanation, dict):
+                st.caption(explanation['description'])
             else:
-                if isinstance(value, bool):
-                    st.write(f"{'✅' if value else '❌'}")
-                else:
-                    with col2:
-                        st.metric(
-                            label=metric_name,
-                            value=f"{value:.4f}" if isinstance(value, (float, int)) else value,
-                            label_visibility="collapsed"
-                        )
+                st.caption(explanation)
+        with col2:
+            if isinstance(value, str) and ("Unsupported" in value or "Error" in value):
+                st.info(value) if "Unsupported" in value else st.error(value)
+            elif isinstance(value, bool):
+                st.write(f"{'✅' if value else '❌'}")
+            else:
+                st.metric(
+                    label=metric_name,
+                    value=f"{value:.4f}" if isinstance(value, (float, int)) else value,
+                    label_visibility="collapsed"
+                )
+        
+        # All details in expander
+        with st.expander("Show Details"):
+            if isinstance(explanation, dict):
+                # Always show formula first
+                st.write("**Formula:**")
+                st.latex(explanation['formula'])
+                
+                # Show actual values and calculation for all metrics
+                if actual_values:
+                    st.write("**Calculation with actual values:**")
+                    if isinstance(actual_values, tuple):
+                        # For basic structural metrics
+                        st.latex(f"""
+                        G_1: {actual_values[0]} \\\\
+                        G_2: {actual_values[1]}
+                        """)
+                    elif isinstance(actual_values, dict):
+                        if metric_name == 'Jaccard Similarity':
+                            st.latex(f"""
+                            J = \\frac{{{actual_values['intersection']}}}{{{actual_values['union']}}} = {actual_values['value']:.4f}
+                            """)
+                        elif metric_name == 'Cosine Similarity':
+                            st.latex(f"""
+                            \\cos = \\frac{{{actual_values['dot_product']:.2f}}}
+                            {{{actual_values['norm1']:.2f} \\cdot {actual_values['norm2']:.2f}}} = {actual_values['value']:.4f}
+                            """)
+                        elif metric_name == 'Spectral Similarity':
+                            st.latex(f"""
+                            \\lambda_1 = [{', '.join([f'{x:.2f}' for x in actual_values['eigenvalues1'][:3]])}...] \\\\
+                            \\lambda_2 = [{', '.join([f'{x:.2f}' for x in actual_values['eigenvalues2'][:3]])}...] \\\\
+                            \\text{{spectral diff}} = {actual_values['spectral_diff']:.4f} \\\\
+                            S = \\frac{{1}}{{1 + {actual_values['spectral_diff']:.4f}}} = {actual_values['value']:.4f}
+                            """)
+                        elif metric_name == 'Graph Edit Distance Similarity':
+                            if 'error' not in actual_values:
+                                st.latex(f"""
+                                GED = {actual_values['ged']} \\\\
+                                \\text{{max possible GED}} = {actual_values['max_possible_ged']} \\\\
+                                GED_{{\text{{sim}}}} = 1 - \\frac{{{actual_values['ged']}}}{{{actual_values['max_possible_ged']}}} = {actual_values['value']:.4f}
+                                """)
+                            else:
+                                st.write(actual_values['error'])
+                        elif metric_name == 'Degree Distribution Match':
+                            st.latex(f"""
+                            G_1: {actual_values['Graph 1 Distribution']} \\\\
+                            G_2: {actual_values['Graph 2 Distribution']}
+                            """)
+                        elif metric_name in ['Clustering Coefficient Difference', 'Average Betweenness Difference', 'Average Closeness Difference']:
+                            if isinstance(actual_values, str):
+                                st.write(actual_values)
+                            else:
+                                # Check if we have the correct keys for the metric
+                                g1_key = f"Graph 1 {metric_name.split(' ')[1]}"  # e.g., "Graph 1 Clustering"
+                                g2_key = f"Graph 2 {metric_name.split(' ')[1]}"  # e.g., "Graph 2 Clustering"
+                                
+                                if g1_key in actual_values and g2_key in actual_values:
+                                    st.latex(f"""
+                                    G_1: {actual_values[g1_key]} \\\\
+                                    G_2: {actual_values[g2_key]} \\\\
+                                    |G_1 - G_2| = {value:.4f}
+                                    """)
+                                else:
+                                    # Fallback for old format
+                                    st.write(f"Values: {actual_values}")
+                        elif metric_name == 'Graph Embedding Similarity':
+                            if 'graph1_embedding' in actual_values:
+                                st.latex(f"""
+                                G_1: [{', '.join([f'{x:.3f}' for x in actual_values['graph1_embedding'][:3]])}...] \\\\
+                                G_2: [{', '.join([f'{x:.3f}' for x in actual_values['graph2_embedding'][:3]])}...] \\\\
+                                sim = {actual_values['similarity']:.4f}
+                                """)
+                        elif metric_name == 'Average Node Embedding Similarity':
+                            if 'individual_similarities' in actual_values:
+                                similarities = actual_values['individual_similarities']
+                                st.latex(f"""
+                                \\min: {min(similarities):.3f} \\\\
+                                \\max: {max(similarities):.3f} \\\\
+                                \\text{{avg}}: {actual_values['average']:.3f}
+                                """)
+                
+                # Always show interpretation last if available
+                if 'interpretation' in explanation:
+                    st.write("**Interpretation:**")
+                    st.write(explanation['interpretation'])
 
 def main():
     st.set_page_config(layout="wide", page_title="Graph Similarity Comparison")
@@ -857,124 +1047,97 @@ def main():
         
         # Matrix-based similarities tab
         with tab1:
+            st.write("### Matrix-based Similarities")
             matrix_sim = calculate_matrix_similarities(G1, G2)
-            for metric, data in matrix_sim.items():
-                with st.container():
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**{metric}**")
-                        explanation = explanations[metric]
-                        if isinstance(explanation, dict):
-                            st.caption(explanation['description'])
-                            with st.expander("Show Formula and Calculation"):
-                                # Show the formula
-                                st.latex(explanation['formula'])
-                                
-                                # Show calculation steps
-                                st.write("**Calculation Steps:**")
-                                steps = data['steps']
-                                
-                                if metric == 'Jaccard Similarity':
-                                    st.latex(f"""
-                                    J = \\frac{{{steps['intersection']}}}{{{steps['union']}}} = {steps['value']:.4f}
-                                    """)
-                                    
-                                elif metric == 'Cosine Similarity':
-                                    st.latex(f"""
-                                    \\cos = \\frac{{{steps['dot_product']:.2f}}}
-                                    {{{steps['norm1']:.2f} \\cdot {steps['norm2']:.2f}}} = {steps['value']:.4f}
-                                    """)
-                                    
-                                elif metric == 'Spectral Similarity':
-                                    st.write(f"Eigenvalues Graph 1: {[f'{x:.2f}' for x in steps['eigenvalues1']]}")
-                                    st.write(f"Eigenvalues Graph 2: {[f'{x:.2f}' for x in steps['eigenvalues2']]}")
-                                    st.latex(f"""
-                                    S = \\frac{{1}}{{1 + {steps['spectral_diff']:.4f}}} = {steps['value']:.4f}
-                                    """)
-                                    
-                                elif metric == 'Graph Edit Distance Similarity':
-                                    if 'error' not in steps:
-                                        st.latex(f"""
-                                        GED_{{sim}} = 1 - \\frac{{{steps['ged']}}}{{{steps['max_possible_ged']}}} = {steps['value']:.4f}
-                                        """)
-                                    else:
-                                        st.write(steps['error'])
-                        else:
-                            st.caption(explanation)
-                    with col2:
-                        st.metric(
-                            label=metric,
-                            value=f"{data['value']:.4f}",
-                            label_visibility="collapsed"
-                        )
+            if matrix_sim:
+                for metric, data in matrix_sim.items():
+                    display_metric_with_details(
+                        metric_name=metric,
+                        value=data['value'],
+                        explanation=explanations[metric],
+                        actual_values=data['steps']
+                    )
+            else:
+                st.warning("Unable to calculate matrix similarities")
         
         # Structural similarities tab
         with tab2:
+            st.write("### Structural Similarities")
             struct_sim = compare_structural_similarity(G1, G2)
             for metric, data in struct_sim.items():
-                with st.container():
-                    col1, col2, col3 = st.columns([3, 2, 1])
-                    with col1:
-                        st.write(f"**{metric}**")
-                        st.caption(explanations[metric])
-                    with col2:
-                        val1, val2 = data['values']
-                        if isinstance(val1, list):
-                            st.caption(f"G1: {val1}")
-                            st.caption(f"G2: {val2}")
-                        else:
-                            st.caption(f"G1: {val1}, G2: {val2}")
-                    with col3:
-                        st.write(f"{'✅' if data['match'] else '❌'}")
+                display_metric_with_details(
+                    metric_name=metric,
+                    value=data['match'],
+                    explanation=explanations[metric],
+                    actual_values=data['values']
+                )
         
         # Node-level similarities tab
         with tab3:
+            st.write("### Node-level Similarities")
             node_sim = compare_node_similarity(G1, G2)
             for metric, value in node_sim.items():
-                display_metric(metric, value)
+                if metric in explanations:
+                    # Get actual values from graphs for the metric
+                    actual_values = get_node_metric_values(G1, G2, metric)
+                    display_metric_with_details(
+                        metric_name=metric,
+                        value=value,
+                        explanation=explanations[metric],
+                        actual_values=actual_values
+                    )
         
         # Embedding-based similarities tab
         with tab4:
+            st.write("### Embedding-based Similarities")
             try:
                 embedding_sim = compare_embeddings(G1, G2)
                 for metric, data in embedding_sim.items():
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            st.write(f"**{metric}**")
-                            explanation = explanations[metric]
-                            if isinstance(explanation, dict):
-                                st.caption(explanation['description'])
-                                with st.expander("Show Formula and Details"):
-                                    st.latex(explanation['formula'])
-                                    st.write("**Calculation Details:**")
-                                    steps = data['steps']
-                                    
-                                    if metric == 'Graph Embedding Similarity':
-                                        st.write("Graph 1 embedding (first 3 dimensions):")
-                                        st.write(steps['graph1_embedding'][:3])
-                                        st.write("Graph 2 embedding (first 3 dimensions):")
-                                        st.write(steps['graph2_embedding'][:3])
-                                        st.write(f"Cosine similarity: {steps['similarity']:.4f}")
-                                    
-                                    elif metric == 'Average Node Embedding Similarity':
-                                        st.write("Distribution of node-pair similarities:")
-                                        fig, ax = plt.subplots()
-                                        ax.hist(steps['individual_similarities'], bins=20)
-                                        ax.set_xlabel("Similarity")
-                                        ax.set_ylabel("Frequency")
-                                        st.pyplot(fig)
-                                        st.write(f"Average similarity: {steps['average']:.4f}")
-                        
-                        with col2:
-                            st.metric(
-                                label=metric,
-                                value=f"{data['value']:.4f}",
-                                label_visibility="collapsed"
-                            )
+                    display_metric_with_details(
+                        metric_name=metric,
+                        value=data['value'],
+                        explanation=explanations[metric],
+                        actual_values=data['steps']
+                    )
             except Exception as e:
                 st.error(f"Error calculating embedding similarities: {str(e)}")
-                st.info("Note: Embedding calculation requires connected graphs with sufficient nodes.")
+
+def get_node_metric_values(G1, G2, metric):
+    """Get actual values for node-level metrics"""
+    try:
+        if metric == 'Degree Distribution Match':
+            return {
+                'Graph 1 Distribution': dict(Counter([d for n, d in G1.degree()])),
+                'Graph 2 Distribution': dict(Counter([d for n, d in G2.degree()]))
+            }
+        elif metric == 'Clustering Coefficient Difference':
+            if isinstance(G1, nx.DiGraph) or isinstance(G2, nx.DiGraph):
+                return "Unsupported for directed graphs"
+            return {
+                'Graph 1 Clustering': f"{nx.average_clustering(G1):.4f}",
+                'Graph 2 Clustering': f"{nx.average_clustering(G2):.4f}"
+            }
+        elif metric == 'Average Betweenness Difference':
+            if isinstance(G1, nx.DiGraph) or isinstance(G2, nx.DiGraph):
+                return "Unsupported for directed graphs"
+            bet1 = nx.betweenness_centrality(G1)
+            bet2 = nx.betweenness_centrality(G2)
+            return {
+                'Graph 1 Average': f"{sum(bet1.values())/len(bet1):.4f}",
+                'Graph 2 Average': f"{sum(bet2.values())/len(bet2):.4f}"
+            }
+        elif metric == 'Average Closeness Difference':
+            if isinstance(G1, nx.DiGraph) or isinstance(G2, nx.DiGraph):
+                return "Unsupported for directed graphs"
+            close1 = nx.closeness_centrality(G1)
+            close2 = nx.closeness_centrality(G2)
+            return {
+                'Graph 1 Average': f"{sum(close1.values())/len(close1):.4f}",
+                'Graph 2 Average': f"{sum(close2.values())/len(close2):.4f}"
+            }
+    except Exception as e:
+        return f"Error calculating values: {str(e)}"
+    return None
 
 if __name__ == "__main__":
     main() 
